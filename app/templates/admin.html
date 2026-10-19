@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}RA dashboard - VIT Campus CA Portal{% endblock %}
+
+{% block content %}
+<h1>RA dashboard</h1>
+<div class="banner-warning">
+  Authentication omitted in demo: anyone who can open this page acts as the Registration Authority.
+  A real RA would sign in with MFA. (That is why the portal only listens on 127.0.0.1.)
+</div>
+
+<section class="card">
+  <h2>Pending requests ({{ pending | length }})</h2>
+  {% if not pending %}
+    <p class="muted">Nothing waiting.</p>
+  {% endif %}
+  {% for r in pending %}
+    <div class="request">
+      <div class="request-head">
+        <code>{{ r.tracking_id }}</code>
+        <span class="badge badge-pending">PENDING</span>
+        {% if r.demo_mode %}<span class="badge badge-demo">DEMO MODE</span>{% endif %}
+        <span class="muted">submitted {{ r.created_at }}</span>
+      </div>
+      <table class="details">
+        <tr><th>Name</th><td>{{ r.name }}</td></tr>
+        <tr><th>E-mail</th><td>{{ r.email }}</td></tr>
+        <tr><th>Registration no.</th><td>{{ r.reg_no }}</td></tr>
+        <tr><th>Role</th><td>{{ r.role }}</td></tr>
+        <tr><th>Template</th><td>{{ templates[r.template].title }} (<code>{{ r.template }}</code>)</td></tr>
+        {% if r.dns_names %}<tr><th>DNS names</th><td>{{ r.dns_names.replace(',', ', ') }}</td></tr>{% endif %}
+        <tr><th>Key</th><td>{{ key_info[r.id] }}</td></tr>
+      </table>
+      <p class="muted">Before approving: check the name, e-mail and registration number against the applicant's VIT ID.</p>
+      <div class="decision">
+        <form method="post" action="{{ url_for('admin.approve', request_id=r.id) }}">
+          <button type="submit">Approve and issue</button>
+        </form>
+        <form method="post" action="{{ url_for('admin.reject', request_id=r.id) }}" class="inline-form">
+          <input name="reason" placeholder="Reason for rejecting (shown to the applicant)" maxlength="300">
+          <button type="submit" class="button-danger">Reject</button>
+        </form>
+      </div>
+    </div>
+  {% endfor %}
+</section>
+
+<section class="card">
+  <h2>Recent decisions</h2>
+  {% if not decided %}
+    <p class="muted">No decisions yet.</p>
+  {% else %}
+    <div class="table-scroll">
+    <table class="list">
+      <tr><th>Tracking ID</th><th>Name</th><th>Template</th><th>Decision</th><th>When</th><th>Certificate / reason</th></tr>
+      {% for d in decided %}
+        <tr>
+          <td><a href="{{ url_for('user.request_status', tracking_id=d.tracking_id) }}"><code>{{ d.tracking_id }}</code></a></td>
+          <td>{{ d.name }}</td>
+          <td><code>{{ d.template }}</code></td>
+          <td><span class="badge badge-{{ d.status }}">{{ d.status | upper }}</span></td>
+          <td>{{ d.decided_at }}</td>
+          <td>{% if d.status == 'approved' %}<code>{{ d.serial_hex }}</code>{% else %}{{ d.reject_reason }}{% endif %}</td>
+        </tr>
+      {% endfor %}
+    </table>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

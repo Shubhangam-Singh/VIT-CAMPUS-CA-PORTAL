@@ -15,7 +15,8 @@ def create_app(test_config=None):
     from . import db
     db.init_app(app)
 
-    from . import routes_user
+    from . import routes_admin, routes_user
     app.register_blueprint(routes_user.bp)
+    app.register_blueprint(routes_admin.bp)
 
     return app

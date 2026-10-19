@@ -29,6 +29,9 @@ class Config:
     # SQLite database file (instance/ is git-ignored).
     DATABASE = BASE_DIR / "instance" / "campus_ca.db"
 
+    # Largest upload accepted (a CSR is about 1-3 KB).
+    MAX_CONTENT_LENGTH = 1024 * 1024
+
     # Folders of the ONLINE CA, created by scripts/bootstrap_ca.py (Phase 1).
     # There is deliberately NO setting for the offline Root CA folder: the Root CA private
     # key must stay offline and the web application must never be able to load it.

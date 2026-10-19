@@ -8,6 +8,19 @@
     request X.509 certificates, the Registration Authority approves them, and the
     Issuing CA signs them.
   </p>
+  <p class="actions">
+    <a class="button" href="{{ url_for('user.enroll') }}">Request a certificate</a>
+    <a class="button button-secondary" href="{{ url_for('admin.dashboard') }}">RA dashboard</a>
+  </p>
+</section>
+
+<section class="card" id="check">
+  <h2>Check a request</h2>
+  <form class="inline-form" action="{{ url_for('user.status_lookup') }}" method="get">
+    <label for="tracking_id">Tracking ID</label>
+    <input id="tracking_id" name="tracking_id" placeholder="REQ-3F9A1C07B2D4" required>
+    <button type="submit">Show status</button>
+  </form>
 </section>
 
 <section class="card">

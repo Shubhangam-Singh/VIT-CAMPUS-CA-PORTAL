@@ -90,9 +90,21 @@ The certificate is saved in `ca/issued/<serial>.pem` and recorded in the databas
 
 ### 5. Run the portal
 
+The RA's "Approve" button unlocks the Issuing CA key, so set `ISSUING_CA_PASS` in the same terminal first
+(`$env:ISSUING_CA_PASS = "..."` in PowerShell, `export ISSUING_CA_PASS='...'` in Git Bash), then:
+
     python run.py
 
-Then open http://localhost:5000
+Open http://127.0.0.1:5000 and try the workflow:
+
+1. **Request a certificate**: choose student or faculty (only that role's templates are offered), fill in
+   name, e-mail and registration number, then either upload a CSR or tick **Demo mode**. Keep the tracking ID.
+2. **RA dashboard** (`/admin`): approve (this issues the certificate) or reject with a reason.
+   There is no login in the demo.
+3. **Status page** (`/request/<tracking ID>`): download `cert.pem` and `chain.pem`, plus `cert.p12` for
+   demo-mode requests. The .p12 password is shown only once, on the first visit after approval.
+
+Every step is recorded in the `audit_log` table (who, what, when).
 
 ### 6. Run the tests
 

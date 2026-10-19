@@ -46,7 +46,7 @@ def run_issue(args):
         raise IssuanceError(f"cannot read {args.csr}: {err.strerror}") from None
 
     identity = Identity(args.name, args.email, args.regno, tuple(args.dns))
-    result = issue_certificate(load_csr(csr_bytes), identity, args.template)
+    result = issue_certificate(load_csr(csr_bytes), identity, args.template, actor="cli")
 
     cert = result.certificate
     print("Certificate issued")

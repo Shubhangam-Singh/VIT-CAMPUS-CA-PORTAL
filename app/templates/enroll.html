@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Request a certificate - VIT Campus CA Portal{% endblock %}
+
+{% block content %}
+<h1>Request a certificate</h1>
+
+{% if not role %}
+  {# Step 1: the role decides which templates are offered (report: role -> allowed templates). #}
+  <section class="card">
+    <h2>Step 1: who are you?</h2>
+    <p class="actions">
+      <a class="button" href="{{ url_for('user.enroll', role='student') }}">I am a student</a>
+      <a class="button" href="{{ url_for('user.enroll', role='faculty') }}">I am faculty</a>
+    </p>
+    <p class="muted">Students may request: student login, code signing.
+       Faculty may request: e-mail (S/MIME), code signing, TLS server.</p>
+  </section>
+{% else %}
+  <p class="muted">Role: <strong>{{ role }}</strong> (<a href="{{ url_for('user.enroll') }}">change</a>)</p>
+
+  {% if error %}<div class="flash flash-error">{{ error }}</div>{% endif %}
+
+  <form class="card form" method="post" enctype="multipart/form-data"
+        action="{{ url_for('user.enroll', role=role) }}">
+    <input type="hidden" name="role" value="{{ role }}">
+
+    <h2>Your details</h2>
+    <p class="muted">The RA checks these against your VIT ID before approving. They - not anything
+       inside your CSR - are what the certificate will say.</p>
+    <label for="name">Full name</label>
+    <input id="name" name="name" value="{{ form.get('name', '') }}" maxlength="64" required>
+    <label for="email">VIT e-mail</label>
+    <input id="email" name="email" type="email" value="{{ form.get('email', '') }}" required>
+    <label for="reg_no">Registration / employee number</label>
+    <input id="reg_no" name="reg_no" value="{{ form.get('reg_no', '') }}" maxlength="32" required>
+
+    <h2>Certificate type</h2>
+    {% for t in templates %}
+      <label class="choice">
+        <input type="radio" name="template" value="{{ t.name }}" required
+               {% if form.get('template') == t.name or (not form.get('template') and loop.first) %}checked{% endif %}>
+        <strong>{{ t.title }}</strong> <code>{{ t.name }}</code>
+        <span class="muted">
+          {% if t.key_type == 'EC' %}EC P-256 key{% else %}RSA key, at least {{ t.rsa_bits }} bits{% endif %},
+          valid {{ t.days }} days
+        </span>
+      </label>
+    {% endfor %}
+
+    {% if templates | selectattr('san_dns') | list %}
+      <label for="dns_names">DNS names (only for a TLS server certificate; separate with commas)</label>
+      <input id="dns_names" name="dns_names" value="{{ form.get('dns_names', '') }}" placeholder="lab1.vit.local, www.lab1.vit.local">
+    {% endif %}
+
+    <h2>Your key</h2>
+    <label for="csr_file">Upload your certificate request (CSR, PEM or DER)</label>
+    <input id="csr_file" name="csr_file" type="file" accept=".csr,.pem,.der,.req">
+    <p class="muted">Make one with OpenSSL, e.g.
+       <code>openssl req -new -newkey rsa:2048 -nodes -keyout my.key -out my.csr -subj "/CN=me"</code>.
+       Your private key stays on your computer.</p>
+
+    <p class="or">- or -</p>
+
+    <label class="choice demo-choice">
+      <input type="checkbox" name="demo_mode" {% if form.get('demo_mode') %}checked{% endif %}>
+      <strong>Demo mode:</strong> let the server create my key and give me a password-protected .p12 file
+    </label>
+    <div class="banner-demo">DEMO ONLY - in real PKI the private key never leaves the user.</div>
+
+    <button type="submit">Submit request</button>
+  </form>
+{% endif %}
+{% endblock %}
