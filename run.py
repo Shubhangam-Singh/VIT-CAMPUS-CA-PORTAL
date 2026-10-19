@@ -2,6 +2,7 @@
 
     python run.py                  normal start
     FLASK_DEBUG=1 python run.py    auto-reload while editing (PowerShell: $env:FLASK_DEBUG = "1")
+    PORT=5001 python run.py        another port, if 5000 is busy (the CRL URL inside certificates stays :5000)
 """
 import os
 
@@ -16,4 +17,4 @@ if __name__ == "__main__":
         init_db()
 
     # 127.0.0.1 = this computer only, because the RA dashboard has no login in the demo.
-    app.run(host="127.0.0.1", port=5000, debug=os.environ.get("FLASK_DEBUG") == "1")
+    app.run(host="127.0.0.1", port=int(os.environ.get("PORT", 5000)), debug=os.environ.get("FLASK_DEBUG") == "1")

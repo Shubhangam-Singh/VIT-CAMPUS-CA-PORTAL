@@ -1,0 +1,117 @@
+VIT Campus CA Portal - S/MIME demo, 2026-10-19T09:52:23Z
+
+========== 1. A throw-away CA issues Dr. Meera Iyer a faculty_email certificate ==========
+$ .venv/Scripts/python.exe scripts/bootstrap_ca.py --ca-dir demo_work/smime/ca --existing-dir demo_work/smime/no_existing_ca
+    Mode: GENERATE a new demo CA (demo_work/smime/no_existing_ca has no CA files)
+    [1/4] Root CA: generating its RSA-4096 key ...
+    [2/4] Root CA: creating the self-signed Root certificate (7300 days) ...
+    [3/4] Issuing CA: generating its RSA-4096 key and certificate request (CSR) ...
+    [4/4] Root CA: signing the Issuing CA's CSR (3650 days, pathlen 0) ...
+    Self-check: the Issuing CA certificate verifies against the Root CA certificate ... OK
+    
+    CA folder: demo_work/smime/ca
+    Files written (relative to the CA folder):
+      root_offline/root-ca.key     Root CA private key, encrypted with ROOT_CA_PASS
+      root_offline/root-ca.crt     Root CA certificate
+      issuing/issuing-ca.key       Issuing CA private key, encrypted with ISSUING_CA_PASS
+      issuing/issuing-ca.csr       Issuing CA certificate request (what the Root signed)
+      issuing/issuing-ca.crt       Issuing CA certificate, signed by the Root
+      issuing/root-ca.crt          public copy of the Root certificate (the web app's trust anchor)
+      issuing/chain.pem            chain file: issuing-ca.crt + root-ca.crt
+      issued/, crl/                (empty for now)
+    
+    Subjects and SHA-256 fingerprints:
+      Root CA     CN=VIT Root CA,O=VIT-PKI,C=IN
+                  34:3F:BB:63:F8:BF:63:92:17:5F:5F:9A:C6:D1:56:87:0F:1D:B2:6E:5A:B6:B4:17:11:69:B7:DB:76:2E:6E:9A
+      Issuing CA  CN=VIT Issuing CA,O=VIT-PKI,C=IN
+                  08:AC:6B:7E:00:A6:86:DD:8B:FD:F5:B0:B0:2C:CB:95:C2:BD:73:9C:AD:44:E6:5A:98:E7:48:C2:7F:9F:2E:08
+    
+    ==============================================================================
+     REMINDER: this folder holds the ROOT CA PRIVATE KEY:
+       demo_work/smime/ca/root_offline
+     A real Root CA is created on an air-gapped machine and kept offline (safe, HSM
+     or USB stick). Before you go live: copy that folder to an offline place, then
+     DELETE it from this computer. The web app has no setting that points to it and
+     never loads it; the Issuing CA works on its own from now on.
+    ==============================================================================
+  [as expected] demo Root CA + Issuing CA created
+$ openssl req -new -quiet -newkey rsa:2048 -nodes -keyout demo_work/smime/meera.key -out demo_work/smime/meera.csr -subj /CN=ignored by the CA
+    -----
+  [as expected] Meera makes her own RSA-2048 key and CSR
+$ .venv/Scripts/python.exe -m app.cli issue --ca-dir demo_work/smime/ca --database demo_work/smime/demo.db --template faculty_email --name Dr. Meera Iyer --email meera.iyer@vit.ac.in --regno FAC1001 --csr demo_work/smime/meera.csr
+    Certificate issued
+      template  faculty_email
+      serial    5163eafbe2db1a975e82c0bcd01c8892
+      subject   C=IN, O=VIT, CN=Dr. Meera Iyer, emailAddress=meera.iyer@vit.ac.in, serialNumber=FAC1001
+      valid     2026-10-19 to 2028-10-18 (UTC)
+      file      demo_work/smime/ca/issued/5163eafbe2db1a975e82c0bcd01c8892.pem
+  [as expected] faculty_email certificate issued
+$ openssl x509 -in demo_work/smime/meera.pem -noout -subject -ext keyUsage,extendedKeyUsage,subjectAltName
+    subject=C=IN, O=VIT, CN=Dr. Meera Iyer, emailAddress=meera.iyer@vit.ac.in, serialNumber=FAC1001
+    X509v3 Key Usage: critical
+        Digital Signature, Key Encipherment
+    X509v3 Extended Key Usage: 
+        E-mail Protection
+    X509v3 Subject Alternative Name: 
+        email:meera.iyer@vit.ac.in
+  [as expected] E-mail Protection + her address in the SAN, as S/MIME needs
+
+========== 2. Meera signs an e-mail ==========
+$ cat demo_work/smime/message.txt
+    From: meera.iyer@vit.ac.in
+    To: hod.scope@vit.ac.in
+    Subject: Lab budget
+    
+    Please release INR 50,000 for the PKI lab.
+$ openssl cms -sign -in demo_work/smime/message.txt -signer demo_work/smime/meera.pem -inkey demo_work/smime/meera.key -certfile demo_work/smime/ca/issuing/chain.pem -out demo_work/smime/signed.eml
+    
+  [as expected] signed.eml is a multipart/signed S/MIME message (text + detached signature + certificates)
+$ head -5 demo_work/smime/signed.eml
+    MIME-Version: 1.0
+    Content-Type: multipart/signed; protocol="application/pkcs7-signature"; micalg="sha-256"; boundary="----562A3296C87F0F3F99180D48EB763696"
+    
+    This is an S/MIME signed message
+  [as expected] it is an S/MIME signed message
+
+========== 3. The receiver verifies it, trusting only the VIT Root CA ==========
+$ openssl cms -verify -in demo_work/smime/signed.eml -CAfile demo_work/smime/ca/issuing/root-ca.crt -out demo_work/smime/verified.txt
+    CMS Verification successful
+  [as expected] signature valid, chain to the Root CA valid, certificate allowed for e-mail
+$ cat demo_work/smime/verified.txt
+    From: meera.iyer@vit.ac.in
+    To: hod.scope@vit.ac.in
+    Subject: Lab budget
+    
+    Please release INR 50,000 for the PKI lab.
+  [as expected] the verified text is exactly what Meera wrote
+
+========== 4. Someone changes one word in transit ==========
+$ grep INR demo_work/smime/tampered.eml
+    Please release INR 90,000 for the PKI lab.
+$ openssl cms -verify -in demo_work/smime/tampered.eml -CAfile demo_work/smime/ca/issuing/root-ca.crt -out demo_work/smime/tampered_out.txt
+    CMS Verification failure
+    2C1C0100:error:1700009E:CMS routines:CMS_SignerInfo_verify_content:verification failure:../openssl-3.5.4/crypto/cms/cms_sd.c:1080:
+    2C1C0100:error:1700006D:CMS routines:CMS_verify:content verify error:../openssl-3.5.4/crypto/cms/cms_smime.c:466:
+  [as expected] the change is detected: the content no longer matches the signed digest
+
+========== 5. A student LOGIN certificate cannot sign e-mail ==========
+$ openssl req -new -quiet -newkey rsa:2048 -nodes -keyout demo_work/smime/asha.key -out demo_work/smime/asha.csr -subj /CN=ignored by the CA
+    -----
+$ .venv/Scripts/python.exe -m app.cli issue --ca-dir demo_work/smime/ca --database demo_work/smime/demo.db --template student_auth --name Asha Rao --email asha.rao@vit.ac.in --regno 21BCE0001 --csr demo_work/smime/asha.csr
+    Certificate issued
+      template  student_auth
+      serial    32b31c7a346710dfaf0cd6c1dccec8c5
+      subject   C=IN, O=VIT, CN=Asha Rao, emailAddress=asha.rao@vit.ac.in, serialNumber=21BCE0001
+      valid     2026-10-19 to 2027-10-19 (UTC)
+      file      demo_work/smime/ca/issued/32b31c7a346710dfaf0cd6c1dccec8c5.pem
+$ openssl cms -sign -in demo_work/smime/message.txt -signer demo_work/smime/asha.pem -inkey demo_work/smime/asha.key -certfile demo_work/smime/ca/issuing/chain.pem -out demo_work/smime/asha_signed.eml
+    
+$ openssl cms -verify -in demo_work/smime/asha_signed.eml -CAfile demo_work/smime/ca/issuing/root-ca.crt -out demo_work/smime/asha_out.txt
+    CMS Verification failure
+    B89F0100:error:17000064:CMS routines:cms_signerinfo_verify_cert:certificate verify error:../openssl-3.5.4/crypto/cms/cms_smime.c:291:Verify error: unsuitable certificate purpose
+  [as expected] its EKU is clientAuth only, so S/MIME verification refuses it
+
+========== Summary ==========
+  steps as expected: 10
+  surprises:         0
+  S/MIME DEMO COMPLETED: everything behaved as expected.

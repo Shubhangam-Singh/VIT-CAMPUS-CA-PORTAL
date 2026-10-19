@@ -63,7 +63,15 @@ def run_issue(args):
     print(f"  serial    {result.serial_hex}")
     print(f"  subject   {subject_text(cert.subject)}")
     print(f"  valid     {cert.not_valid_before_utc:%Y-%m-%d} to {cert.not_valid_after_utc:%Y-%m-%d} (UTC)")
-    print(f"  file      {result.pem_path}")
+    print(f"  file      {shown(result.pem_path)}")
+
+
+def shown(path):
+    """A path relative to the current folder when it is inside it (shorter, and no user names in logs)."""
+    try:
+        return Path(path).resolve().relative_to(Path.cwd().resolve()).as_posix()
+    except ValueError:
+        return str(path)
 
 
 def run_revoke(args):
@@ -75,7 +83,7 @@ def run_revoke(args):
     print(f"Certificate {serial_hex} revoked ({args.reason})")
     print(f"  CRL #{number} published: {len(list(crl))} revoked certificate(s), "
           f"next update {crl.next_update_utc:%Y-%m-%d %H:%M} UTC")
-    print(f"  file      {Path(current_app.config['CRL_DIR']) / 'crl.pem'}")
+    print(f"  file      {shown(Path(current_app.config['CRL_DIR']) / 'crl.pem')}")
 
 
 def main(argv=None):

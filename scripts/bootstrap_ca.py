@@ -360,7 +360,7 @@ def write_ca_files(ca_dir, ca, issuing_pass, root_pass):
 
 
 def print_summary(ca_dir, ca, written):
-    print(f"\nCA folder: {ca_dir}")
+    print(f"\nCA folder: {shown(ca_dir)}")
     print("Files written (relative to the CA folder):")
     for path, what in written:
         print(f"  {path.relative_to(ca_dir).as_posix():<28} {what}")
@@ -375,7 +375,7 @@ def print_summary(ca_dir, ca, written):
         print(f"""
 ==============================================================================
  REMINDER: this folder holds the ROOT CA PRIVATE KEY:
-   {ca_dir / 'root_offline'}
+   {shown(ca_dir / 'root_offline')}
  A real Root CA is created on an air-gapped machine and kept offline (safe, HSM
  or USB stick). Before you go live: copy that folder to an offline place, then
  DELETE it from this computer. The web app has no setting that points to it and

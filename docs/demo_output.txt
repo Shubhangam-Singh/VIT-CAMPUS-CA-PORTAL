@@ -1,0 +1,248 @@
+VIT Campus CA Portal - end-to-end demo, 2026-10-19T09:55:00Z
+Throw-away CA in demo_work/e2e (your real ca/ folder is not used).
+
+========== 1. Bootstrap: offline Root CA -> online Issuing CA ==========
+$ .venv/Scripts/python.exe scripts/bootstrap_ca.py --ca-dir demo_work/e2e/ca --existing-dir demo_work/e2e/no_existing_ca
+    Mode: GENERATE a new demo CA (demo_work/e2e/no_existing_ca has no CA files)
+    [1/4] Root CA: generating its RSA-4096 key ...
+    [2/4] Root CA: creating the self-signed Root certificate (7300 days) ...
+    [3/4] Issuing CA: generating its RSA-4096 key and certificate request (CSR) ...
+    [4/4] Root CA: signing the Issuing CA's CSR (3650 days, pathlen 0) ...
+    Self-check: the Issuing CA certificate verifies against the Root CA certificate ... OK
+    
+    CA folder: demo_work/e2e/ca
+    Files written (relative to the CA folder):
+      root_offline/root-ca.key     Root CA private key, encrypted with ROOT_CA_PASS
+      root_offline/root-ca.crt     Root CA certificate
+      issuing/issuing-ca.key       Issuing CA private key, encrypted with ISSUING_CA_PASS
+      issuing/issuing-ca.csr       Issuing CA certificate request (what the Root signed)
+      issuing/issuing-ca.crt       Issuing CA certificate, signed by the Root
+      issuing/root-ca.crt          public copy of the Root certificate (the web app's trust anchor)
+      issuing/chain.pem            chain file: issuing-ca.crt + root-ca.crt
+      issued/, crl/                (empty for now)
+    
+    Subjects and SHA-256 fingerprints:
+      Root CA     CN=VIT Root CA,O=VIT-PKI,C=IN
+                  4A:AB:F3:82:73:B3:8B:60:4E:E3:2C:5A:E3:DD:9F:0F:AA:D7:36:35:5E:DE:F0:53:A2:C1:69:28:D0:54:A3:1A
+      Issuing CA  CN=VIT Issuing CA,O=VIT-PKI,C=IN
+                  69:19:49:18:84:07:59:C0:9E:0F:15:B0:01:F5:48:79:A8:B1:BC:54:84:10:76:47:92:5B:5F:42:4C:73:25:B6
+    
+    ==============================================================================
+     REMINDER: this folder holds the ROOT CA PRIVATE KEY:
+       demo_work/e2e/ca/root_offline
+     A real Root CA is created on an air-gapped machine and kept offline (safe, HSM
+     or USB stick). Before you go live: copy that folder to an offline place, then
+     DELETE it from this computer. The web app has no setting that points to it and
+     never loads it; the Issuing CA works on its own from now on.
+    ==============================================================================
+  [as expected] Root CA (RSA-4096, 20 y) signed the Issuing CA (RSA-4096, 10 y, pathlen 0)
+$ openssl x509 -in demo_work/e2e/ca/issuing/issuing-ca.crt -noout -subject -issuer -ext basicConstraints,keyUsage
+    subject=C=IN, O=VIT-PKI, CN=VIT Issuing CA
+    issuer=C=IN, O=VIT-PKI, CN=VIT Root CA
+    X509v3 Basic Constraints: critical
+        CA:TRUE, pathlen:0
+    X509v3 Key Usage: critical
+        Certificate Sign, CRL Sign
+  [as expected] the Issuing CA may sign end-entity certificates but no further CAs
+$ openssl verify -CAfile demo_work/e2e/ca/issuing/root-ca.crt demo_work/e2e/ca/issuing/issuing-ca.crt
+    demo_work/e2e/ca/issuing/issuing-ca.crt: OK
+  [as expected] OpenSSL accepts the Issuing CA certificate
+
+========== 2. Applicants make their own key pairs and CSRs (the private keys never leave them) ==========
+$ openssl req -new -quiet -newkey rsa:2048 -nodes -keyout demo_work/e2e/asha.key -out demo_work/e2e/asha.csr -subj /CN=ignored by the CA
+    -----
+  [as expected] student Asha: RSA-2048 key + CSR
+$ openssl req -new -quiet -newkey rsa:3072 -nodes -keyout demo_work/e2e/ravi.key -out demo_work/e2e/ravi.csr -subj /CN=ignored by the CA
+    -----
+  [as expected] Ravi: RSA-3072 key + CSR (code signing needs at least 3072 bits)
+
+========== 3. The RA has verified their identity; the CA issues from templates ==========
+$ .venv/Scripts/python.exe -m app.cli issue --ca-dir demo_work/e2e/ca --database demo_work/e2e/demo.db --template student_auth --name Asha Rao --email asha.rao@vit.ac.in --regno 21BCE0001 --csr demo_work/e2e/asha.csr
+    Certificate issued
+      template  student_auth
+      serial    d25041dad2c67427f2381cd9210e9899
+      subject   C=IN, O=VIT, CN=Asha Rao, emailAddress=asha.rao@vit.ac.in, serialNumber=21BCE0001
+      valid     2026-10-19 to 2027-10-19 (UTC)
+      file      demo_work/e2e/ca/issued/d25041dad2c67427f2381cd9210e9899.pem
+  [as expected] student_auth certificate for Asha
+$ .venv/Scripts/python.exe -m app.cli issue --ca-dir demo_work/e2e/ca --database demo_work/e2e/demo.db --template code_signing --name Ravi Kumar --email ravi.kumar@vit.ac.in --regno 21BCE0002 --csr demo_work/e2e/ravi.csr
+    Certificate issued
+      template  code_signing
+      serial    9310116aa3599f75af288d360e1454d0
+      subject   C=IN, O=VIT, CN=Ravi Kumar, emailAddress=ravi.kumar@vit.ac.in, serialNumber=21BCE0002
+      valid     2026-10-19 to 2028-10-18 (UTC)
+      file      demo_work/e2e/ca/issued/9310116aa3599f75af288d360e1454d0.pem
+  [as expected] code_signing certificate for Ravi
+$ .venv/Scripts/python.exe -m app.cli issue --ca-dir demo_work/e2e/ca --database demo_work/e2e/demo.db --template code_signing --name Asha Rao --email asha.rao@vit.ac.in --regno 21BCE0001 --csr demo_work/e2e/asha.csr
+    ERROR: RSA key too small: the CSR has 2048 bits, template code_signing needs at least 3072
+  [as expected] policy: a 2048-bit key is refused for code signing
+
+========== 4. Anyone can check a certificate with OpenSSL ==========
+$ openssl verify -CAfile demo_work/e2e/ca/issuing/root-ca.crt -untrusted demo_work/e2e/ca/issuing/issuing-ca.crt demo_work/e2e/ca/issued/d25041dad2c67427f2381cd9210e9899.pem
+    demo_work/e2e/ca/issued/d25041dad2c67427f2381cd9210e9899.pem: OK
+  [as expected] Asha's certificate chains to the Root CA
+$ openssl verify -CAfile demo_work/e2e/ca/issuing/root-ca.crt -untrusted demo_work/e2e/ca/issuing/issuing-ca.crt demo_work/e2e/ca/issued/9310116aa3599f75af288d360e1454d0.pem
+    demo_work/e2e/ca/issued/9310116aa3599f75af288d360e1454d0.pem: OK
+  [as expected] Ravi's certificate chains to the Root CA
+$ openssl x509 -in demo_work/e2e/ca/issued/d25041dad2c67427f2381cd9210e9899.pem -noout -subject -ext basicConstraints,keyUsage,extendedKeyUsage,crlDistributionPoints
+    subject=C=IN, O=VIT, CN=Asha Rao, emailAddress=asha.rao@vit.ac.in, serialNumber=21BCE0001
+    X509v3 Basic Constraints: critical
+        CA:FALSE
+    X509v3 Key Usage: critical
+        Digital Signature
+    X509v3 Extended Key Usage: 
+        TLS Web Client Authentication
+    X509v3 CRL Distribution Points: 
+        Full Name:
+          URI:http://localhost:5000/crl.pem
+  [as expected] template extensions are in the certificate (CA:FALSE, clientAuth, CRL URL)
+
+========== 5. Asha's laptop is stolen: the RA revokes her certificate ==========
+$ .venv/Scripts/python.exe -m app.cli revoke --ca-dir demo_work/e2e/ca --database demo_work/e2e/demo.db --serial d25041dad2c67427f2381cd9210e9899 --reason keyCompromise
+    Certificate d25041dad2c67427f2381cd9210e9899 revoked (keyCompromise)
+      CRL #1 published: 1 revoked certificate(s), next update 2026-10-26 09:55 UTC
+      file      demo_work/e2e/ca/crl/crl.pem
+  [as expected] revocation recorded and a new CRL signed by the Issuing CA
+$ openssl crl -in demo_work/e2e/ca/crl/crl.pem -noout -text
+    Certificate Revocation List (CRL):
+            Version 2 (0x1)
+            Signature Algorithm: sha256WithRSAEncryption
+            Issuer: C=IN, O=VIT-PKI, CN=VIT Issuing CA
+            Last Update: Oct 19 09:55:12 2026 GMT
+            Next Update: Oct 26 09:55:12 2026 GMT
+            CRL extensions:
+                X509v3 CRL Number: 
+                    1
+                X509v3 Authority Key Identifier: 
+                    6E:DC:E6:D0:76:62:AA:3B:51:D9:16:84:05:E6:78:70:79:00:4C:B3
+    Revoked Certificates:
+        Serial Number: D25041DAD2C67427F2381CD9210E9899
+            Revocation Date: Oct 19 09:55:12 2026 GMT
+            CRL entry extensions:
+                X509v3 CRL Reason Code: 
+                    Key Compromise
+        Signature Algorithm: sha256WithRSAEncryption
+        Signature Value:
+            92:90:da:d4:37:a3:31:8f:d2:a6:9e:44:be:c0:99:5c:98:9c:
+            c9:f5:7e:16:6b:e7:76:18:2b:0c:cc:ab:4f:c7:dd:55:31:3f:
+            b3:da:dc:c0:00:76:10:e4:74:17:4f:b1:e6:e8:bd:5d:50:82:
+            4c:94:d0:0a:41:c9:24:11:72:c6:97:49:f2:63:b2:ad:5a:03:
+            23:d6:6b:ab:d8:27:1b:24:58:5d:86:9e:ed:5c:89:16:c1:74:
+            ff:ee:f0:4a:96:1f:a4:98:c9:e0:8e:ff:ef:f6:2b:7f:0e:84:
+            e7:82:18:23:3b:9a:3b:ef:ad:e2:25:01:d9:d0:c9:f4:d1:b0:
+            ec:b6:b7:06:cd:34:90:29:b8:dd:0c:87:0f:18:57:3d:51:a2:
+            06:c8:19:5b:5e:fa:f6:74:1b:14:89:fe:67:fa:ff:92:70:b6:
+            dd:bd:6a:29:07:49:43:10:ae:8e:bc:70:ab:21:80:74:ac:69:
+            33:89:71:cf:f2:d6:90:f9:50:ee:b1:aa:56:f6:31:f7:18:10:
+            21:48:f3:d8:71:98:9b:fc:ab:cc:60:a7:b6:ae:66:09:1e:fb:
+            69:1e:bf:c5:16:e1:14:f8:d7:b9:de:35:1a:a7:76:b2:e7:4c:
+            e9:0c:96:89:d1:3a:e5:c8:65:50:7f:0f:cc:ca:44:48:a3:8b:
+            39:20:18:db:3d:9b:56:be:aa:ea:50:9c:58:3c:15:9a:df:2c:
+            9f:d2:70:30:eb:cd:07:ef:91:18:5e:ca:4c:61:18:f3:48:a0:
+            94:b2:ce:24:9c:0f:99:d2:a2:13:9f:16:be:ce:3c:b8:9b:36:
+            73:9a:43:9d:52:3d:02:5d:14:5c:8f:50:35:e2:f8:2e:d5:a5:
+            75:3c:e2:26:eb:44:e1:ae:10:7e:7b:23:45:61:1e:c2:bc:78:
+            d8:a7:6a:28:7a:ef:22:11:0c:ff:5e:0e:51:aa:aa:0c:ed:b8:
+            02:63:1b:d5:61:1d:99:bf:c1:68:2c:81:96:e4:fa:91:b5:a4:
+            72:25:4d:ef:e8:6a:27:f4:29:f2:19:b2:aa:19:79:08:a1:16:
+            52:da:2f:3f:b6:77:3f:08:73:5b:b1:83:17:b4:62:5c:09:00:
+            08:9b:17:b0:13:65:f4:9f:39:fd:76:e8:2c:cb:ea:1f:0d:ce:
+            3e:5f:11:53:5f:7d:dd:c4:6c:a3:a3:36:25:e9:d6:4b:e4:02:
+            0e:52:f0:15:7b:f0:7b:b9:75:2f:4f:37:3b:42:04:ea:83:95:
+            e2:99:dc:77:30:e6:88:16:a3:1f:13:1d:da:da:fc:bb:aa:ea:
+            e3:69:5c:44:98:27:c9:40:06:ca:bd:76:f7:b8:bb:a4:a3:82:
+            d3:ce:34:4f:a5:d1:37:da
+  [as expected] the CRL lists Asha's serial with reason Key Compromise
+
+========== 6. CRL check ==========
+$ openssl verify -crl_check -CAfile demo_work/e2e/ca/issuing/root-ca.crt -untrusted demo_work/e2e/ca/issuing/issuing-ca.crt -CRLfile demo_work/e2e/ca/crl/crl.pem demo_work/e2e/ca/issued/d25041dad2c67427f2381cd9210e9899.pem
+    C=IN, O=VIT, CN=Asha Rao, emailAddress=asha.rao@vit.ac.in, serialNumber=21BCE0001
+    error 23 at 0 depth lookup: certificate revoked
+    error demo_work/e2e/ca/issued/d25041dad2c67427f2381cd9210e9899.pem: verification failed
+  [as expected] Asha's certificate is now rejected
+$ openssl verify -crl_check -CAfile demo_work/e2e/ca/issuing/root-ca.crt -untrusted demo_work/e2e/ca/issuing/issuing-ca.crt -CRLfile demo_work/e2e/ca/crl/crl.pem demo_work/e2e/ca/issued/9310116aa3599f75af288d360e1454d0.pem
+    demo_work/e2e/ca/issued/9310116aa3599f75af288d360e1454d0.pem: OK
+  [as expected] Ravi's certificate is still fine
+
+========== 7. Ravi signs his report (RSA-PSS, SHA-256) ==========
+$ openssl pkcs12 -export -inkey demo_work/e2e/ravi.key -in demo_work/e2e/ca/issued/9310116aa3599f75af288d360e1454d0.pem -certfile demo_work/e2e/ca/issuing/chain.pem -name Ravi Kumar -out demo_work/e2e/ravi.p12 -passout env:P12_PASSWORD
+    
+  [as expected] Ravi packs his key + certificate + CA chain into ravi.p12
+$ .venv/Scripts/python.exe tools/sign_file.py --p12 demo_work/e2e/ravi.p12 --file demo_work/e2e/report.pdf
+    Signed report.pdf
+      signer     Ravi Kumar (reg no 21BCE0002, ravi.kumar@vit.ac.in)
+      sha256     8038da7091276ca4ddd55de549ae202950e5c51df6f3baf01084d8d3a1280a16
+      algorithm  RSASSA-PSS with SHA-256 (MGF1-SHA256, salt length 32)
+      signed_at  2026-10-19T09:55:16Z
+      written    demo_work\e2e\report.pdf.sig.json
+  [as expected] report.pdf.sig.json written
+
+========== 8. Anyone verifies the signature ==========
+$ .venv/Scripts/python.exe tools/verify_file.py --file demo_work/e2e/report.pdf --root demo_work/e2e/ca/issuing/root-ca.crt --crl demo_work/e2e/ca/crl/crl.pem
+    Verifying report.pdf against report.pdf.sig.json
+    
+    PASS  1. File hash matches
+          SHA-256 of the file: 8038da7091276ca4ddd55de549ae202950e5c51df6f3baf01084d8d3a1280a16
+    PASS  2. Signature is valid
+          RSASSA-PSS with SHA-256 (MGF1-SHA256, salt length 32), made with the key of 'Ravi Kumar'
+    PASS  3. Certificate chains to the VIT Root CA
+          'Ravi Kumar' -> 'VIT Issuing CA' -> 'VIT Root CA' (trust anchor: root-ca.crt)
+    PASS  4. Code-signing certificate, valid when signed
+          EKU includes codeSigning; signed_at 2026-10-19T09:55:16Z is within 2026-10-19T09:55:07Z to
+          2028-10-18T09:55:07Z
+    PASS  5. Not revoked (current CRL)
+          not on CRL #1 (published 2026-10-19T09:55:12Z)
+    
+    RESULT: VALID - signed by Ravi Kumar (reg no 21BCE0002, ravi.kumar@vit.ac.in) at 2026-10-19T09:55:16Z
+  [as expected] all five checks pass and the signer is identified
+
+========== 9. Tamper test: one byte of the report is changed ==========
+$ .venv/Scripts/python.exe tools/verify_file.py --file demo_work/e2e/tampered.pdf --root demo_work/e2e/ca/issuing/root-ca.crt --crl demo_work/e2e/ca/crl/crl.pem
+    Verifying tampered.pdf against tampered.pdf.sig.json
+    
+    FAIL  1. File hash matches
+          SHA-256 of the file: a06a2c47daead38e7a43f5a3231fbb3e41313f762900a76cd0f5241ed92f4c90; the
+          signature file says: 8038da7091276ca4ddd55de549ae202950e5c51df6f3baf01084d8d3a1280a16
+    PASS  2. Signature is valid
+          RSASSA-PSS with SHA-256 (MGF1-SHA256, salt length 32), made with the key of 'Ravi Kumar'
+    PASS  3. Certificate chains to the VIT Root CA
+          'Ravi Kumar' -> 'VIT Issuing CA' -> 'VIT Root CA' (trust anchor: root-ca.crt)
+    PASS  4. Code-signing certificate, valid when signed
+          EKU includes codeSigning; signed_at 2026-10-19T09:55:16Z is within 2026-10-19T09:55:07Z to
+          2028-10-18T09:55:07Z
+    PASS  5. Not revoked (current CRL)
+          not on CRL #1 (published 2026-10-19T09:55:12Z)
+    
+    RESULT: NOT VALID - failed check(s) 1
+  [as expected] the changed file is detected (check 1 fails)
+
+========== 10. Ravi's key is reported stolen too: revoke, then verify the ORIGINAL report again ==========
+$ .venv/Scripts/python.exe -m app.cli revoke --ca-dir demo_work/e2e/ca --database demo_work/e2e/demo.db --serial 9310116aa3599f75af288d360e1454d0 --reason keyCompromise
+    Certificate 9310116aa3599f75af288d360e1454d0 revoked (keyCompromise)
+      CRL #2 published: 2 revoked certificate(s), next update 2026-10-26 09:55 UTC
+      file      demo_work/e2e/ca/crl/crl.pem
+  [as expected] second revocation, CRL number goes up
+$ .venv/Scripts/python.exe tools/verify_file.py --file demo_work/e2e/report.pdf --root demo_work/e2e/ca/issuing/root-ca.crt --crl demo_work/e2e/ca/crl/crl.pem
+    Verifying report.pdf against report.pdf.sig.json
+    
+    PASS  1. File hash matches
+          SHA-256 of the file: 8038da7091276ca4ddd55de549ae202950e5c51df6f3baf01084d8d3a1280a16
+    PASS  2. Signature is valid
+          RSASSA-PSS with SHA-256 (MGF1-SHA256, salt length 32), made with the key of 'Ravi Kumar'
+    PASS  3. Certificate chains to the VIT Root CA
+          'Ravi Kumar' -> 'VIT Issuing CA' -> 'VIT Root CA' (trust anchor: root-ca.crt)
+    PASS  4. Code-signing certificate, valid when signed
+          EKU includes codeSigning; signed_at 2026-10-19T09:55:16Z is within 2026-10-19T09:55:07Z to
+          2028-10-18T09:55:07Z
+    FAIL  5. Not revoked (current CRL)
+          REVOKED at 2026-10-19T09:55:20Z (reason: keyCompromise). signed_at 2026-10-19T09:55:16Z is
+          before the revocation, but signed_at is only the signer's own claim (there is no trusted
+          timestamp), so a revoked certificate is never accepted
+    
+    RESULT: NOT VALID - failed check(s) 5
+  [as expected] a signature from a revoked certificate is no longer accepted
+
+========== Summary ==========
+  steps as expected: 21
+  surprises:         0
+  DEMO COMPLETED: everything behaved as expected.
