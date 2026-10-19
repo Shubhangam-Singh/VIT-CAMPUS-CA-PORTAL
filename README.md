@@ -29,12 +29,55 @@ Git Bash:
 
     flask --app app init-db
 
-### 3. Run the portal
+### 3. Create the demo CA (Root + Issuing)
+
+CA passphrases come from environment variables, so they are never written to a file.
+Set them in the terminal you run the script from (they last until you close it).
+
+PowerShell:
+
+    $env:ROOT_CA_PASS    = "choose a root passphrase"
+    $env:ISSUING_CA_PASS = "choose a different issuing passphrase"
+
+Git Bash:
+
+    export ROOT_CA_PASS='choose a root passphrase'
+    export ISSUING_CA_PASS='choose a different issuing passphrase'
+
+Then run:
+
+    python scripts/bootstrap_ca.py
+
+This creates the git-ignored `ca/` folder:
+
+| Path | What it is |
+| --- | --- |
+| `ca/root_offline/` | Root CA private key + certificate. **Move this folder offline** when you are done; the web app never reads it. |
+| `ca/issuing/` | Issuing CA key, CSR and certificate, a public copy of the Root certificate, and `chain.pem` (issuing + root). |
+| `ca/issued/`, `ca/crl/` | Empty for now: issued certificates (Phase 2) and the CRL (Phase 4). |
+
+The script refuses to run again if the CA already exists, because a new CA would make every
+certificate issued so far untrusted. To start over on purpose, delete the `ca/` folder yourself.
+
+**Using your own CA instead:** put `root-ca.crt`, `issuing-ca.crt` and `issuing-ca.key` (PEM; the key may
+be encrypted, in which case `ISSUING_CA_PASS` must be its passphrase) into `existing_ca/` and run the same
+command. Only `ISSUING_CA_PASS` is needed, and no Root key is required.
+
+### 4. Run the portal
 
     python run.py
 
 Then open http://localhost:5000
 
-### 4. Run the tests
+### 5. Run the tests
 
     pytest
+
+## Tips
+
+- **VS Code shows "Cannot find module" on imports?** Press Ctrl+Shift+P, choose *Python: Select Interpreter*
+  and pick the one inside `.venv`.
+- **Use `127.0.0.1` rather than `localhost` in scripts and commands on Windows.** `localhost` tries IPv6
+  first, and clients that try one address at a time (Python, PowerShell) then wait about 2 seconds.
+- **Git Bash rewrites arguments that start with `/`**, which breaks `openssl ... -subj "/C=IN/CN=x"`.
+  Run `export MSYS_NO_PATHCONV=1` first.
