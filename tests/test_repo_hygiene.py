@@ -6,9 +6,11 @@
 import ast
 from pathlib import Path
 
+from app.config import Config, ca_folders
+
 ROOT = Path(__file__).resolve().parent.parent
 
-REQUIRED_IGNORES = ["*.key", "*.p12", "*.db", "ca/", "instance/", "existing_ca/"]
+REQUIRED_IGNORES = ["*.key", "*.p12", "*.db", "ca/", "instance/", "existing_ca/", "demo_work/"]
 ROOT_KEY_MARKERS = ("root_offline", "root-ca.key")
 
 
@@ -23,6 +25,12 @@ def test_app_config_has_no_path_to_the_root_ca(app):
     for name, value in app.config.items():
         text = str(value).lower()
         assert not any(marker in text for marker in ROOT_KEY_MARKERS), f"app.config[{name!r}] = {value!r}"
+
+
+def test_ca_folders_helper_matches_the_config_defaults_and_skips_the_root_folder():
+    folders = ca_folders(ROOT / "ca")
+    assert folders == {name: getattr(Config, name) for name in folders}
+    assert not any(marker in str(path) for path in folders.values() for marker in ROOT_KEY_MARKERS)
 
 
 def test_app_code_never_mentions_the_root_ca_key():

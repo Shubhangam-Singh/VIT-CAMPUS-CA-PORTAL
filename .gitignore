@@ -6,6 +6,7 @@
 ca/
 existing_ca/
 instance/
+demo_work/
 .env
 
 # ---- Python / tooling ----

@@ -63,13 +63,38 @@ certificate issued so far untrusted. To start over on purpose, delete the `ca/` 
 be encrypted, in which case `ISSUING_CA_PASS` must be its passphrase) into `existing_ca/` and run the same
 command. Only `ISSUING_CA_PASS` is needed, and no Root key is required.
 
-### 4. Run the portal
+### 4. Issue a certificate from the command line
+
+First make a certificate request (CSR) the way an applicant's software would. In Git Bash, from the
+project folder (`demo_work/` is git-ignored):
+
+    mkdir -p demo_work
+    export MSYS_NO_PATHCONV=1
+    openssl req -new -newkey rsa:2048 -nodes -keyout demo_work/student.key -out demo_work/student.csr -subj "/CN=ignored by the CA"
+
+Then ask the CA to issue it. `ISSUING_CA_PASS` must be set, as in step 3. The name in the CSR is
+ignored: the CA takes the identity from these options.
+
+    python -m app.cli issue --template student_auth --name "Asha Rao" --email asha.rao@vit.ac.in --regno 21BCE0001 --csr demo_work/student.csr
+
+The certificate is saved in `ca/issued/<serial>.pem` and recorded in the database. Check it with OpenSSL:
+
+    openssl verify -CAfile ca/issuing/root-ca.crt -untrusted ca/issuing/issuing-ca.crt ca/issued/<serial>.pem
+
+| Template | Key the CSR must have | Valid for | Purpose |
+| --- | --- | --- | --- |
+| `student_auth` | RSA, at least 2048 bits | 365 days | TLS client authentication |
+| `faculty_email` | RSA, at least 2048 bits | 730 days | S/MIME e-mail (SAN = the e-mail address) |
+| `server_tls` | EC P-256 (`-newkey ec -pkeyopt ec_paramgen_curve:P-256`) | 365 days | TLS server; needs one or more `--dns HOST` |
+| `code_signing` | RSA, at least 3072 bits | 730 days | Code and document signing |
+
+### 5. Run the portal
 
     python run.py
 
 Then open http://localhost:5000
 
-### 5. Run the tests
+### 6. Run the tests
 
     pytest
 
