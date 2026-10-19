@@ -79,7 +79,21 @@ h2 { font-size: 1.15rem; }
 .brand-mark { display: grid; place-items: center; width: 2.6rem; height: 2.6rem; border-radius: 10px; background: rgba(255, 255, 255, 0.12); color: var(--gold); }
 .brand-mark .icon { width: 1.6rem; height: 1.6rem; }
 .brand-text { display: flex; flex-direction: column; line-height: 1.2; }
-.brand-name { font-weight: 700; font-size: 1.12rem; }
+.brand-name { font-weight: 700; font-size: 1.12rem; display: inline-flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; }
+.brand-author-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(242, 169, 0, 0.2);
+  color: #ffd875;
+  border: 1px solid rgba(242, 169, 0, 0.45);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  text-transform: none;
+}
 .brand-sub { font-size: 0.8rem; color: #c9d7ea; }
 
 .nav { display: flex; flex-wrap: wrap; gap: 0.5rem 2.5rem; width: 100%; }
@@ -106,6 +120,7 @@ main.container { flex: 1; padding-top: 2rem; padding-bottom: 3rem; }
 /* ---------------------------------------------------------------- footer */
 .site-footer { margin-top: auto; border-top: 1px solid var(--border); background: var(--surface); padding: 1.2rem 0; font-size: 0.9rem; }
 .footer-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; }
+.footer-by { font-weight: 600; color: var(--brand-2); }
 .footer-links { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }
 .footer-links a { display: inline-flex; gap: 0.3rem; align-items: center; text-decoration: none; }
 
