@@ -1,23 +1,40 @@
 {% extends "base.html" %}
+{% from "_macros.html" import icon, badge, kpi %}
 {% block title %}RA dashboard - VIT Campus CA Portal{% endblock %}
 
 {% block content %}
-<h1>RA dashboard</h1>
-<div class="banner-warning">
+<div class="page-head">
+  <div>
+    <span class="eyebrow">{{ icon('inbox') }} Registration Authority</span>
+    <h1>RA dashboard</h1>
+    <p class="lead">Check each applicant's identity, then approve (the Issuing CA signs) or reject with a reason.</p>
+  </div>
+</div>
+
+<div class="banner-warning">{{ icon('lock') }}<span>
   Authentication omitted in demo: anyone who can open this page acts as the Registration Authority.
-  A real RA would sign in with MFA. (That is why the portal only listens on 127.0.0.1.)
+  A real RA would sign in with MFA. (That is why the portal only listens on 127.0.0.1.)</span>
+</div>
+
+<div class="kpis">
+  {{ kpi(counts.pending, 'waiting for a decision', 'clock', 'warn') }}
+  {{ kpi(counts.approved, 'approved and issued', 'check-circle', 'ok', url_for('admin.certificates')) }}
+  {{ kpi(counts.rejected, 'rejected', 'x-circle', 'muted') }}
+  {{ kpi(counts.revoked, 'certificates revoked', 'ban', 'bad', url_for('admin.certificates', show='revoked')) }}
 </div>
 
 <section class="card">
-  <h2>Pending requests ({{ pending | length }})</h2>
+  <div class="card-head">
+    <h2>{{ icon('inbox') }} Pending requests ({{ pending | length }})</h2>
+  </div>
   {% if not pending %}
-    <p class="muted">Nothing waiting.</p>
+    <div class="empty">{{ icon('check-circle') }}<br>Nothing waiting. New requests appear here.</div>
   {% endif %}
   {% for r in pending %}
     <div class="request">
       <div class="request-head">
         <code>{{ r.tracking_id }}</code>
-        <span class="badge badge-pending">PENDING</span>
+        {{ badge('pending') }}
         {% if r.demo_mode %}<span class="badge badge-demo">DEMO MODE</span>{% endif %}
         <span class="muted">submitted {{ r.created_at }}</span>
       </div>
@@ -30,14 +47,14 @@
         {% if r.dns_names %}<tr><th>DNS names</th><td>{{ r.dns_names.replace(',', ', ') }}</td></tr>{% endif %}
         <tr><th>Key</th><td>{{ key_info[r.id] }}</td></tr>
       </table>
-      <p class="muted">Before approving: check the name, e-mail and registration number against the applicant's VIT ID.</p>
       <div class="decision">
+        <p class="check-tip">{{ icon('user') }} Before approving: check the name, e-mail and registration number against the applicant's VIT ID.</p>
         <form method="post" action="{{ url_for('admin.approve', request_id=r.id) }}">
-          <button type="submit">Approve and issue</button>
+          <button type="submit" class="button-ok">{{ icon('check') }} Approve and issue</button>
         </form>
         <form method="post" action="{{ url_for('admin.reject', request_id=r.id) }}" class="inline-form">
           <input name="reason" placeholder="Reason for rejecting (shown to the applicant)" maxlength="300">
-          <button type="submit" class="button-danger">Reject</button>
+          <button type="submit" class="button-danger">{{ icon('x-circle') }} Reject</button>
         </form>
       </div>
     </div>
@@ -45,9 +62,9 @@
 </section>
 
 <section class="card">
-  <h2>Recent decisions</h2>
+  <h2>{{ icon('activity') }} Recent decisions</h2>
   {% if not decided %}
-    <p class="muted">No decisions yet.</p>
+    <div class="empty">No decisions yet.</div>
   {% else %}
     <div class="table-scroll">
     <table class="list">
@@ -57,9 +74,9 @@
           <td><a href="{{ url_for('user.request_status', tracking_id=d.tracking_id) }}"><code>{{ d.tracking_id }}</code></a></td>
           <td>{{ d.name }}</td>
           <td><code>{{ d.template }}</code></td>
-          <td><span class="badge badge-{{ d.status }}">{{ d.status | upper }}</span></td>
-          <td>{{ d.decided_at }}</td>
-          <td>{% if d.status == 'approved' %}<code>{{ d.serial_hex }}</code>{% else %}{{ d.reject_reason }}{% endif %}</td>
+          <td>{{ badge(d.status) }}</td>
+          <td class="nowrap">{{ d.decided_at }}</td>
+          <td>{% if d.status == 'approved' %}<a href="{{ url_for('admin.certificate_detail', serial=d.serial_hex) }}"><code>{{ d.serial_hex }}</code></a>{% else %}{{ d.reject_reason }}{% endif %}</td>
         </tr>
       {% endfor %}
     </table>

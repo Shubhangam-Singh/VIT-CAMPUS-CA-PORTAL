@@ -1,26 +1,35 @@
 {% extends "base.html" %}
+{% from "_macros.html" import icon %}
 {% block title %}Verify a signature - VIT Campus CA Portal{% endblock %}
 
 {% block content %}
-<h1>Verify a signature</h1>
-<p class="muted">Anyone can check a signed file. The only thing trusted is the VIT Root CA certificate;
-   everything inside the <code>.sig.json</code> is treated as a claim and checked.</p>
+<div class="page-head">
+  <div>
+    <span class="eyebrow">{{ icon('check-circle') }} Anyone</span>
+    <h1>Verify a signature</h1>
+    <p class="lead">Anyone can check a signed file. The only thing trusted is the VIT Root CA certificate;
+       everything inside the <code>.sig.json</code> is treated as a claim and checked.</p>
+  </div>
+</div>
 
-{% if error %}<div class="flash flash-error"><strong>Cannot verify:</strong> {{ error }}</div>{% endif %}
+{% if error %}<div class="flash flash-error">{{ icon('alert') }}<span><strong>Cannot verify:</strong> {{ error }}</span></div>{% endif %}
 
 {% if result %}
   <section class="card">
-    <h2>{{ filename }}:
-      {% if result.passed %}<span class="badge badge-approved">VALID SIGNATURE</span>
-      {% else %}<span class="badge badge-rejected">NOT VALID</span>{% endif %}
-    </h2>
     {% if result.passed %}
-      <div class="signer-box">
-        Signed by <strong>{{ result.signer.name }}</strong>
-        &middot; reg no <strong>{{ result.signer.reg_no }}</strong>
-        &middot; {{ result.signer.email }}<br>
-        <span class="muted">at {{ result.signer.signed_at }} with certificate
-          <a href="{{ url_for('admin.certificate_detail', serial=result.signer.certificate_serial) }}"><code>{{ result.signer.certificate_serial }}</code></a></span>
+      <div class="verdict verdict-ok">{{ icon('shield-check') }}
+        <div><strong class="verdict-title">VALID SIGNATURE</strong>
+          <span>{{ filename }} was signed by <strong>{{ result.signer.name }}</strong>
+          &middot; reg no <strong>{{ result.signer.reg_no }}</strong> &middot; {{ result.signer.email }}</span><br>
+          <span class="muted">at {{ result.signer.signed_at }} with certificate
+            <a href="{{ url_for('admin.certificate_detail', serial=result.signer.certificate_serial) }}"><code>{{ result.signer.certificate_serial }}</code></a></span>
+        </div>
+      </div>
+    {% else %}
+      <div class="verdict verdict-bad">{{ icon('x-circle') }}
+        <div><strong class="verdict-title">NOT VALID</strong>
+          <span>{{ filename }} failed {{ result.checks | rejectattr('passed') | list | length }} of {{ result.checks | length }} checks. Do not trust it.</span>
+        </div>
       </div>
     {% endif %}
     <div class="table-scroll">
@@ -29,7 +38,7 @@
       {% for check in result.checks %}
         <tr class="{{ 'check-pass' if check.passed else 'check-fail' }}">
           <td class="nowrap">{{ check.name }}</td>
-          <td><span class="badge {{ 'badge-approved' if check.passed else 'badge-rejected' }}">{{ 'PASS' if check.passed else 'FAIL' }}</span></td>
+          <td><span class="badge {{ 'badge-ok' if check.passed else 'badge-bad' }}">{{ 'PASS' if check.passed else 'FAIL' }}</span></td>
           <td>{{ check.detail }}</td>
         </tr>
       {% endfor %}
@@ -38,29 +47,25 @@
   </section>
 {% endif %}
 
-<form class="card form" method="post" enctype="multipart/form-data" action="{{ url_for('user.verify_page') }}">
-  <h2>{{ 'Verify another file' if result else 'Files to check' }}</h2>
-  <div class="field-grid">
-    <div>
-      <label for="file">The signed file</label>
-      <input id="file" name="file" type="file" required>
-    </div>
-    <div>
-      <label for="sig_file">Its signature (.sig.json)</label>
-      <input id="sig_file" name="sig_file" type="file" accept=".json" required>
-    </div>
-  </div>
-  <button type="submit" class="button-large">Verify</button>
-</form>
+<div class="grid-main-side section">
+  <form class="card form" method="post" enctype="multipart/form-data" action="{{ url_for('user.verify_page') }}">
+    <h2>{{ icon('upload') }} {{ 'Verify another file' if result else 'Files to check' }}</h2>
+    <label for="file">The signed file</label>
+    <input id="file" name="file" type="file" required>
+    <label for="sig_file">Its signature (.sig.json)</label>
+    <input id="sig_file" name="sig_file" type="file" accept=".json" required>
+    <button type="submit" class="button-large">{{ icon('shield-check') }} Verify</button>
+  </form>
 
-<section class="card">
-  <h2>The five checks</h2>
-  <ol class="chain">
-    <li><strong>File hash matches</strong><span>SHA-256 of the file you uploaded equals the one that was signed: not a single byte changed.</span></li>
-    <li><strong>Signature is valid</strong><span>The RSA-PSS signature over that hash was made with the private key of the certificate in the signature file.</span></li>
-    <li><strong>Certificate chains to the VIT Root CA</strong><span>signer &rarr; Issuing CA &rarr; Root CA, each link checked (signature, validity, CA rules). Only our root-ca.crt is trusted.</span></li>
-    <li><strong>Code-signing certificate, valid when signed</strong><span>Extended Key Usage contains codeSigning, and signed_at lies inside the certificate's validity.</span></li>
-    <li><strong>Not revoked</strong><span>The signer's serial is not on the current, CA-signed CRL. A revoked certificate always fails.</span></li>
-  </ol>
-</section>
+  <aside class="card">
+    <h2>{{ icon('list') }} The five checks</h2>
+    <ol class="chain">
+      <li><strong>File hash matches</strong><span>Not a single byte changed since signing.</span></li>
+      <li><strong>Signature is valid</strong><span>RSA-PSS over that hash, made by the certificate's key.</span></li>
+      <li><strong>Chains to the VIT Root CA</strong><span>signer &rarr; Issuing CA &rarr; Root, every link checked.</span></li>
+      <li><strong>Code-signing, valid when signed</strong><span>codeSigning EKU, signed_at inside the validity.</span></li>
+      <li><strong>Not revoked</strong><span>Not on the current, CA-signed CRL.</span></li>
+    </ol>
+  </aside>
+</div>
 {% endblock %}

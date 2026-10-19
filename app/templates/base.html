@@ -3,38 +3,85 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>{% block title %}VIT Campus CA Portal{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <header class="site-header">
-    <div class="container header-row">
-      <a class="brand" href="{{ url_for('user.home') }}">VIT Campus CA Portal</a>
-      <nav class="nav">
-        <a href="{{ url_for('user.enroll') }}">Request a certificate</a>
-        <a href="{{ url_for('user.home') }}#check">Check a request</a>
-        <a href="{{ url_for('user.sign_page') }}">Sign a file</a>
-        <a href="{{ url_for('user.verify_page') }}">Verify a signature</a>
-        <a href="{{ url_for('admin.dashboard') }}">RA dashboard</a>
-        <a href="{{ url_for('admin.certificates') }}">Certificates</a>
-        <a href="{{ url_for('admin.audit_log') }}">Audit log</a>
-      </nav>
-    </div>
-  </header>
+{% from "_macros.html" import icon %}
+{% macro navlink(endpoint, label, name) -%}
+  <a href="{{ url_for(endpoint) }}" class="{{ 'active' if request.endpoint == endpoint }}">{{ icon(name) }}<span>{{ label }}</span></a>
+{%- endmacro %}
 
-  <main class="container">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% for category, message in messages %}
-        <div class="flash flash-{{ category }}">{{ message }}</div>
-      {% endfor %}
-    {% endwith %}
-    {% block content %}{% endblock %}
-  </main>
+<header class="site-header">
+  <div class="container header-row">
+    <a class="brand" href="{{ url_for('user.home') }}">
+      <span class="brand-mark">{{ icon('shield-check') }}</span>
+      <span class="brand-text">
+        <span class="brand-name">VIT Campus CA Portal</span>
+        <span class="brand-sub">Public Key Infrastructure &middot; VIT Vellore</span>
+      </span>
+    </a>
+    <nav class="nav" aria-label="Main">
+      <div class="nav-group">
+        <span class="nav-label">Applicants</span>
+        <div class="nav-links">
+          {{ navlink('user.enroll', 'Request a certificate', 'upload') }}
+          {{ navlink('user.status_lookup', 'Track a request', 'search') }}
+          {{ navlink('user.sign_page', 'Sign a file', 'pen') }}
+          {{ navlink('user.verify_page', 'Verify a signature', 'check-circle') }}
+        </div>
+      </div>
+      <div class="nav-group nav-group-ra">
+        <span class="nav-label">Registration Authority</span>
+        <div class="nav-links">
+          {{ navlink('admin.dashboard', 'RA dashboard', 'inbox') }}
+          {{ navlink('admin.certificates', 'Certificates', 'award') }}
+          {{ navlink('admin.audit_log', 'Audit log', 'activity') }}
+        </div>
+      </div>
+    </nav>
+  </div>
+</header>
 
-  <footer class="site-footer">
-    <div class="container">
-      Demo project for the BCSE330L case study (VIT Vellore). Not a production CA.
+{% if not ca_ready %}
+  <div class="health health-bad">
+    <div class="container">{{ icon('alert') }}
+      <span><strong>Setup needed: the CA does not exist yet.</strong> Requests can be submitted, but nothing can be
+      approved until you run <code>python scripts/bootstrap_ca.py</code> (with <code>ROOT_CA_PASS</code> and
+      <code>ISSUING_CA_PASS</code> set), then restart the portal.</span>
     </div>
-  </footer>
+  </div>
+{% elif not ca_key_available %}
+  <div class="health health-warn">
+    <div class="container">{{ icon('lock') }}
+      <span><strong>The Issuing CA key is locked.</strong> Set <code>ISSUING_CA_PASS</code> in the terminal that runs
+      <code>python run.py</code> and restart it; until then approvals and revocations will fail.</span>
+    </div>
+  </div>
+{% endif %}
+
+<main class="container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="flash flash-{{ category }}">{{ icon('check-circle' if category == 'success' else 'alert') }}<span>{{ message }}</span></div>
+    {% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-row">
+    <div>
+      <strong>VIT Campus CA Portal</strong><br>
+      <span class="muted">Demo project for the BCSE330L case study, VIT Vellore. Not a production CA.</span>
+    </div>
+    <div class="footer-links">
+      <a href="{{ url_for('user.crl_pem') }}">{{ icon('list') }} CRL (PEM)</a>
+      <a href="{{ url_for('user.crl_der') }}">{{ icon('list') }} CRL (DER)</a>
+      <a href="{{ url_for('user.verify_page') }}">{{ icon('check-circle') }} Verify a signature</a>
+    </div>
+  </div>
+</footer>
 </body>
 </html>

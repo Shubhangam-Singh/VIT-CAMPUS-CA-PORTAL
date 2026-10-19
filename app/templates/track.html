@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Track a request - VIT Campus CA Portal{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <span class="eyebrow">{{ icon('search') }} Applicants</span>
+    <h1>Track a request</h1>
+    <p class="lead">Enter the tracking ID you got when you submitted your request.</p>
+  </div>
+</div>
+
+<section class="card">
+  <form class="inline-form" action="{{ url_for('user.status_lookup') }}" method="get">
+    <label for="tracking_id">Tracking ID</label>
+    <input id="tracking_id" name="tracking_id" placeholder="REQ-3F9A1C07B2D4" required autofocus>
+    <button type="submit">{{ icon('arrow-right') }} Show status</button>
+  </form>
+  <p class="muted">The status page shows whether the RA has decided yet, and once your certificate is issued
+     you download it there. Lost the ID? Submit a new request.</p>
+</section>
+{% endblock %}

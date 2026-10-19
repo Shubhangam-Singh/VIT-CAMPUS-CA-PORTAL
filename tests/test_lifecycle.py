@@ -70,7 +70,12 @@ def test_certificate_list_shows_status_and_days_left_and_highlights_expiring(ca_
     assert rows[fresh].group(1) == ""
     assert "VALID" in rows[soon].group(0) and ">10<" in rows[soon].group(0) and rows[soon].group(1) == "expiring"
     assert "EXPIRED" in rows[old].group(0) and rows[old].group(1) == ""
-    assert "VALID 2" in page and "EXPIRED 1" in page and "REVOKED 0" in page
+    tiles = dict((label, int(value)) for value, label in
+                 re.findall(r'kpi-value">(\d+)</span>\s*<span class="kpi-label">([^<]+)<', page))
+    assert tiles == {"valid": 2, "expire within 30 days": 1, "expired": 1, "revoked": 0}
+
+    expiring_tab = text(web.get("/admin/certs?show=expiring"))     # filter tabs
+    assert soon in expiring_tab and fresh not in expiring_tab and old not in expiring_tab
 
 
 def test_detail_page_shows_the_parsed_certificate(ca_app, web, keys):

@@ -1,31 +1,50 @@
 {% extends "base.html" %}
+{% from "_macros.html" import icon %}
 {% block title %}Sign a file - VIT Campus CA Portal{% endblock %}
 
 {% block content %}
-<h1>Sign a file</h1>
-<div class="banner-demo">
-  DEMO ONLY - this page makes you upload your private key (.p12) to the server. Real signing happens on
-  your own computer: <code>python tools/sign_file.py --p12 my.p12 --file report.pdf</code>.
-  Nothing you upload here is stored.
+<div class="page-head">
+  <div>
+    <span class="eyebrow">{{ icon('pen') }} Applicants</span>
+    <h1>Sign a file</h1>
+    <p class="lead">RSA-PSS with SHA-256, using a code-signing certificate. You get back a <code>.sig.json</code> file.</p>
+  </div>
 </div>
 
-{% if error %}<div class="flash flash-error"><strong>Not signed:</strong> {{ error }}</div>{% endif %}
+<div class="banner-demo">{{ icon('alert') }}<span>
+  DEMO ONLY - this page makes you upload your private key (.p12) to the server. Real signing happens on
+  your own computer: <code>python tools/sign_file.py --p12 my.p12 --file report.pdf</code>.
+  Nothing you upload here is stored.</span>
+</div>
 
-<form class="card form" method="post" enctype="multipart/form-data" action="{{ url_for('user.sign_page') }}">
-  <h2><span class="step">1</span> Your code-signing certificate</h2>
-  <p class="muted">A <code>.p12</code> from a <strong>code_signing</strong> certificate (e.g. a demo-mode request,
-     or one you built with <code>openssl pkcs12 -export</code>). Other certificates are refused.</p>
-  <label for="p12_file">.p12 file</label>
-  <input id="p12_file" name="p12_file" type="file" accept=".p12,.pfx" required>
-  <label for="password">.p12 password</label>
-  <input id="password" name="password" type="password" autocomplete="off" required>
+{% if error %}<div class="flash flash-error">{{ icon('alert') }}<span><strong>Not signed:</strong> {{ error }}</span></div>{% endif %}
 
-  <h2><span class="step">2</span> The file to sign</h2>
-  <label for="file">File (any type, e.g. a PDF report)</label>
-  <input id="file" name="file" type="file" required>
+<div class="grid-main-side">
+  <form class="card form" method="post" enctype="multipart/form-data" action="{{ url_for('user.sign_page') }}">
+    <h2><span class="step">1</span> Your code-signing certificate</h2>
+    <p class="muted">A <code>.p12</code> from a <strong>code_signing</strong> certificate (e.g. a demo-mode request,
+       or one you built with <code>openssl pkcs12 -export</code>). Other certificates are refused.</p>
+    <label for="p12_file">.p12 file</label>
+    <input id="p12_file" name="p12_file" type="file" accept=".p12,.pfx" required>
+    <label for="password">.p12 password</label>
+    <input id="password" name="password" type="password" autocomplete="off" required>
 
-  <p class="muted">You get back <code>&lt;file&gt;.sig.json</code>: SHA-256 of the file, the RSA-PSS signature,
-     your certificate, the CA chain and the time of signing. Keep it next to the file.</p>
-  <button type="submit" class="button-large">Sign and download .sig.json</button>
-</form>
+    <h2><span class="step">2</span> The file to sign</h2>
+    <label for="file">File (any type, e.g. a PDF report)</label>
+    <input id="file" name="file" type="file" required>
+
+    <button type="submit" class="button-large">{{ icon('pen') }} Sign and download .sig.json</button>
+  </form>
+
+  <aside class="card">
+    <h2>{{ icon('file') }} What you get</h2>
+    <p class="muted">A small JSON file to keep next to the signed file:</p>
+    <ul class="chain">
+      <li><strong>sha256</strong><span>fingerprint of the file's exact bytes</span></li>
+      <li><strong>signature</strong><span>RSA-PSS over that hash, made with your private key</span></li>
+      <li><strong>signer_certificate + chain</strong><span>so anyone can check it leads to the VIT Root CA</span></li>
+      <li><strong>signed_at</strong><span>the time of signing (your claim; see the verify page)</span></li>
+    </ul>
+  </aside>
+</div>
 {% endblock %}

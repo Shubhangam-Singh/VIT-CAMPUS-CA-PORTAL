@@ -48,7 +48,11 @@ def dashboard():
         " FROM requests r LEFT JOIN certificates c ON c.request_id = r.id"
         " WHERE r.status != 'pending' ORDER BY r.decided_at DESC, r.id DESC LIMIT 20").fetchall()
     key_info = {row["id"]: describe_csr_key(row) for row in pending}
-    return render_template("admin.html", pending=pending, decided=decided, key_info=key_info, templates=TEMPLATES)
+    counts = {status: db.execute("SELECT COUNT(*) FROM requests WHERE status = ?", (status,)).fetchone()[0]
+              for status in ("pending", "approved", "rejected")}
+    counts["revoked"] = db.execute("SELECT COUNT(*) FROM certificates WHERE status = 'revoked'").fetchone()[0]
+    return render_template("admin.html", pending=pending, decided=decided, key_info=key_info, templates=TEMPLATES,
+                           counts=counts)
 
 
 def pending_request(request_id):
@@ -147,7 +151,18 @@ def certificates():
         items.append({"row": row, "status": status, "days_left": days_left,
                       "expiring": status == "valid" and days_left < EXPIRY_WARNING_DAYS})
     counts = {s: sum(1 for i in items if i["status"] == s) for s in ("valid", "expired", "revoked")}
-    return render_template("certs.html", items=items, counts=counts, warning_days=EXPIRY_WARNING_DAYS)
+    counts["expiring"] = sum(1 for i in items if i["expiring"])
+
+    # Filter tabs: ?show=valid | expiring | expired | revoked (anything else = all)
+    show = request.args.get("show", "all")
+    if show == "expiring":
+        items = [i for i in items if i["expiring"]]
+    elif show in ("valid", "expired", "revoked"):
+        items = [i for i in items if i["status"] == show]
+    else:
+        show = "all"
+    return render_template("certs.html", items=items, counts=counts, warning_days=EXPIRY_WARNING_DAYS, show=show,
+                           total=sum(counts[s] for s in ("valid", "expired", "revoked")))
 
 
 @bp.route("/certs/<serial>")

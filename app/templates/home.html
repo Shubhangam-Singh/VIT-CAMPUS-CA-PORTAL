@@ -1,47 +1,82 @@
 {% extends "base.html" %}
+{% from "_macros.html" import icon, kpi %}
 
 {% block content %}
 <section class="hero">
+  <span class="eyebrow">{{ icon('shield') }} BCSE330L case study &middot; VIT Vellore</span>
   <h1>VIT Campus CA Portal</h1>
   <p class="lead">
-    A small Public Key Infrastructure for the VIT Vellore campus. Students and faculty
-    request X.509 certificates, the Registration Authority approves them, and the
-    Issuing CA signs them.
+    A working Public Key Infrastructure for the campus. Students and faculty request X.509 certificates,
+    the Registration Authority checks who they are, and the Issuing CA signs them. Anyone can check a
+    certificate or a signed file against the VIT Root CA.
   </p>
   <p class="actions">
-    <a class="button" href="{{ url_for('user.enroll') }}">Request a certificate</a>
-    <a class="button button-secondary" href="{{ url_for('admin.dashboard') }}">RA dashboard</a>
+    <a class="button button-gold button-large" href="{{ url_for('user.enroll') }}">{{ icon('upload') }} Request a certificate</a>
+    <a class="button button-secondary" href="{{ url_for('user.status_lookup') }}">{{ icon('search') }} Track a request</a>
+    <a class="button button-secondary" href="{{ url_for('user.verify_page') }}">{{ icon('check-circle') }} Verify a signature</a>
   </p>
+  <div class="hero-badges">
+    <span>{{ icon('key') }} RSA-4096 CA keys</span>
+    <span>{{ icon('lock') }} Offline Root CA</span>
+    <span>{{ icon('list') }} Signed CRL + OCSP</span>
+    <span>{{ icon('pen') }} RSA-PSS document signing</span>
+  </div>
 </section>
 
+<div class="kpis">
+  {{ kpi(stats.issued, 'certificates issued', 'award', 'ok', url_for('admin.certificates')) }}
+  {{ kpi(stats.pending, 'requests waiting for the RA', 'clock', 'warn', url_for('admin.dashboard')) }}
+  {{ kpi(stats.revoked, 'certificates revoked', 'ban', 'bad', url_for('admin.certificates', show='revoked')) }}
+  {{ kpi('CRL', 'revocation list, signed', 'list', 'muted', url_for('user.crl_pem')) }}
+</div>
+
+<section class="card">
+  <h2>{{ icon('shield-check') }} How the trust chain works</h2>
+  <div class="chain-flow">
+    <div class="chain-node offline">
+      <div class="chain-icon">{{ icon('lock') }}</div>
+      <strong>Root CA</strong>
+      <span>Kept offline. Self-signed. It signs only the Issuing CA certificate.</span>
+    </div>
+    <div class="chain-node">
+      <div class="chain-icon">{{ icon('server') }}</div>
+      <strong>Issuing CA</strong>
+      <span>Online. Signs end-entity certificates and publishes the revocation list (CRL).</span>
+    </div>
+    <div class="chain-node">
+      <div class="chain-icon">{{ icon('users') }}</div>
+      <strong>Registration Authority (RA)</strong>
+      <span>Checks who the applicant is and approves or rejects the request. It signs nothing itself.</span>
+    </div>
+    <div class="chain-node">
+      <div class="chain-icon">{{ icon('award') }}</div>
+      <strong>End-entity certificates</strong>
+      <span>Student login, faculty e-mail, server TLS and code signing certificates.</span>
+    </div>
+  </div>
+</section>
+
+<div class="grid-3 section">
+  <a class="card feature" href="{{ url_for('user.enroll') }}">
+    <span class="feature-icon">{{ icon('upload') }}</span>
+    <span><strong>Get a certificate</strong><span>Upload a CSR (your key never leaves you) or use demo mode.</span></span>
+  </a>
+  <a class="card feature" href="{{ url_for('user.sign_page') }}">
+    <span class="feature-icon">{{ icon('pen') }}</span>
+    <span><strong>Sign a document</strong><span>RSA-PSS with a code-signing certificate, saved as a .sig.json file.</span></span>
+  </a>
+  <a class="card feature" href="{{ url_for('user.verify_page') }}">
+    <span class="feature-icon">{{ icon('check-circle') }}</span>
+    <span><strong>Verify a signature</strong><span>Five independent checks, from the file hash to the current CRL.</span></span>
+  </a>
+</div>
+
 <section class="card" id="check">
-  <h2>Check a request</h2>
+  <h2>{{ icon('search') }} Check a request</h2>
   <form class="inline-form" action="{{ url_for('user.status_lookup') }}" method="get">
     <label for="tracking_id">Tracking ID</label>
     <input id="tracking_id" name="tracking_id" placeholder="REQ-3F9A1C07B2D4" required>
-    <button type="submit">Show status</button>
+    <button type="submit">{{ icon('arrow-right') }} Show status</button>
   </form>
-</section>
-
-<section class="card">
-  <h2>How the trust chain works</h2>
-  <ol class="chain">
-    <li>
-      <strong>Root CA</strong>
-      <span>Kept offline. Self-signed. It signs only the Issuing CA certificate.</span>
-    </li>
-    <li>
-      <strong>Issuing CA</strong>
-      <span>Online. Signs end-entity certificates and publishes the revocation list (CRL).</span>
-    </li>
-    <li>
-      <strong>Registration Authority (RA)</strong>
-      <span>Checks who the applicant is and approves or rejects the request. It signs nothing itself.</span>
-    </li>
-    <li>
-      <strong>End-entity certificates</strong>
-      <span>Student login, faculty e-mail, server TLS and code signing certificates.</span>
-    </li>
-  </ol>
 </section>
 {% endblock %}

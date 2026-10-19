@@ -3,6 +3,7 @@
 The applicant never talks to the CA directly. They submit a request here; the RA approves or
 rejects it on /admin; once approved, they download their certificate with the tracking ID.
 """
+import os
 import re
 import secrets
 from pathlib import Path
@@ -25,9 +26,24 @@ from .templates_def import ROLE_TEMPLATES, TEMPLATES, templates_for_role
 bp = Blueprint("user", __name__)
 
 
+@bp.app_context_processor
+def ca_health():
+    """Shown on every page: is the CA set up, and can its key be unlocked?
+    (So "no Issuing CA found" is explained before anyone presses Approve.)"""
+    issuing_dir = Path(current_app.config["ISSUING_DIR"])
+    return {"ca_ready": (issuing_dir / "issuing-ca.crt").is_file(),
+            "ca_key_available": "issuing_ca" in current_app.extensions or bool(os.environ.get("ISSUING_CA_PASS"))}
+
+
 @bp.route("/")
 def home():
-    return render_template("home.html")
+    db = get_db()
+    stats = {
+        "pending": db.execute("SELECT COUNT(*) FROM requests WHERE status = 'pending'").fetchone()[0],
+        "issued": db.execute("SELECT COUNT(*) FROM certificates").fetchone()[0],
+        "revoked": db.execute("SELECT COUNT(*) FROM certificates WHERE status = 'revoked'").fetchone()[0],
+    }
+    return render_template("home.html", stats=stats)
 
 
 # --------------------------------------------------------------------------------------
@@ -116,10 +132,10 @@ def certificate_for(request_row):
 
 @bp.route("/status")
 def status_lookup():
-    """The 'check a request' box on the home page."""
+    """'Track a request': a form, or a jump straight to the request when a tracking ID is given."""
     tracking_id = request.args.get("tracking_id", "").strip().upper()
     if not tracking_id:
-        return redirect(url_for("user.home"))
+        return render_template("track.html")
     return redirect(url_for("user.request_status", tracking_id=tracking_id))
 
 

@@ -1,48 +1,70 @@
 {% extends "base.html" %}
+{% from "_macros.html" import icon, badge %}
 {% block title %}Certificate {{ row.serial_hex }} - VIT Campus CA Portal{% endblock %}
 
 {% block content %}
-<p class="muted"><a href="{{ url_for('admin.certificates') }}">&larr; All certificates</a></p>
-<h1>{{ row.subject_cn }} <code class="title-code">{{ row.template }}</code></h1>
-<p>
-  <span class="badge badge-{{ {'valid': 'approved', 'expired': 'expired', 'revoked': 'rejected'}[status] }}">{{ status | upper }}</span>
-  {% if status == 'revoked' %}
-    <span class="muted">revoked {{ row.revoked_at }} &middot; reason: <strong>{{ row.revocation_reason }}</strong></span>
-  {% endif %}
-  {% if tracking_id %}
-    <span class="muted">&middot; from request <a href="{{ url_for('user.request_status', tracking_id=tracking_id) }}">{{ tracking_id }}</a></span>
-  {% endif %}
-</p>
+<a class="back" href="{{ url_for('admin.certificates') }}">&larr; All certificates</a>
+<div class="page-head">
+  <div>
+    <span class="eyebrow">{{ icon('award') }} Certificate</span>
+    <h1>{{ row.subject_cn }} <code class="title-code">{{ row.template }}</code></h1>
+    <p class="lead"><code>{{ row.serial_hex }}</code></p>
+  </div>
+  <div>{{ badge(status) }}</div>
+</div>
 
-<section class="card">
-  <h2>What the certificate says</h2>
-  <p class="muted">Read from the certificate file itself, not from the database.</p>
-  <table class="details">
-    {% for label, value in fields.items() %}
-      <tr><th>{{ label }}</th><td>{% if label in ('Serial number', 'SHA-256 fingerprint') %}<code>{{ value }}</code>{% else %}{{ value }}{% endif %}</td></tr>
-    {% endfor %}
-  </table>
-</section>
-
-{% if status != 'revoked' %}
-<section class="card">
-  <h2>Revoke this certificate</h2>
-  <p class="muted">Revoking cannot be undone. A new CRL (next CRL number, valid 7 days) is signed by the
-     Issuing CA straight away and published at <a href="{{ url_for('user.crl_pem') }}">/crl.pem</a>.</p>
-  <form method="post" action="{{ url_for('admin.revoke', serial=row.serial_hex) }}" class="inline-form">
-    <label for="reason">Reason</label>
-    <select id="reason" name="reason" required>
-      <option value="">- choose -</option>
-      {% for name in reasons %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
-    </select>
-    <button type="submit" class="button-danger">Revoke</button>
-  </form>
-</section>
+{% if status == 'revoked' %}
+  <div class="flash flash-error">{{ icon('ban') }}<span>Revoked {{ row.revoked_at }} &middot; reason: <strong>{{ row.revocation_reason }}</strong>.
+    It is on the CRL; OpenSSL, the OCSP responder and /verify all reject it.</span></div>
 {% endif %}
 
+<div class="grid-main-side">
+  <section class="card">
+    <h2>{{ icon('file') }} What the certificate says</h2>
+    <p class="muted">Read from the certificate file itself, not from the database.</p>
+    <table class="details">
+      {% for label, value in fields.items() %}
+        <tr><th>{{ label }}</th><td>{% if label in ('Serial number', 'SHA-256 fingerprint') %}<code>{{ value }}</code>{% else %}{{ value }}{% endif %}</td></tr>
+      {% endfor %}
+    </table>
+  </section>
+
+  <div>
+    <section class="card">
+      <h2>{{ icon('activity') }} Status</h2>
+      <table class="details">
+        <tr><th>Status</th><td>{{ badge(status) }}</td></tr>
+        <tr><th>Key</th><td>{{ row.key_type }}</td></tr>
+        <tr><th>Issued</th><td>{{ row.issued_at }}</td></tr>
+        {% if tracking_id %}<tr><th>Request</th><td><a href="{{ url_for('user.request_status', tracking_id=tracking_id) }}">{{ tracking_id }}</a></td></tr>{% endif %}
+      </table>
+      <p class="actions">
+        <a class="button button-secondary" href="{{ url_for('user.api_status', serial=row.serial_hex) }}">{{ icon('code') }} Status as JSON</a>
+      </p>
+    </section>
+
+    {% if status != 'revoked' %}
+    <section class="card">
+      <h2>{{ icon('ban') }} Revoke this certificate</h2>
+      <p class="muted">Revoking cannot be undone. A new CRL (next CRL number, valid 7 days) is signed by the
+         Issuing CA straight away and published at <a href="{{ url_for('user.crl_pem') }}">/crl.pem</a>.</p>
+      <form method="post" action="{{ url_for('admin.revoke', serial=row.serial_hex) }}" class="form">
+        <label for="reason">Reason</label>
+        <select id="reason" name="reason" required>
+          <option value="">- choose -</option>
+          {% for name in reasons %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
+        </select>
+        <button type="submit" class="button-danger">{{ icon('ban') }} Revoke</button>
+      </form>
+    </section>
+    {% endif %}
+  </div>
+</div>
+
 <section class="card">
-  <h2>Check it yourself</h2>
-  <p class="muted">Status as JSON: <a href="{{ url_for('user.api_status', serial=row.serial_hex) }}">/api/status/{{ row.serial_hex }}</a></p>
+  <h2>{{ icon('code') }} Check it yourself</h2>
+  <p class="muted">Copy the certificate below into <code>cert.pem</code>, then in Git Bash:
+     <code>openssl x509 -in cert.pem -noout -text</code></p>
   <details class="help">
     <summary>Certificate (PEM)</summary>
     <pre>{{ pem }}</pre>

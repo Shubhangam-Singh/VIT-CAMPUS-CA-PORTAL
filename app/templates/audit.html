@@ -1,25 +1,33 @@
 {% extends "base.html" %}
+{% from "_macros.html" import icon %}
 {% block title %}Audit log - VIT Campus CA Portal{% endblock %}
 
 {% block content %}
-<h1>Audit log</h1>
-<p class="actions">
-  <a class="button button-secondary" href="{{ url_for('admin.audit_csv') }}">Export CSV</a>
-  <span class="muted">Who did what, and when (UTC). Newest first{% if rows | length == 500 %}, last 500 shown{% endif %}.</span>
-</p>
+<div class="page-head">
+  <div>
+    <span class="eyebrow">{{ icon('activity') }} Registration Authority</span>
+    <h1>Audit log</h1>
+    <p class="lead">Who did what, and when (UTC). Newest first{% if rows | length == 500 %}, last 500 shown{% endif %}.</p>
+  </div>
+  <a class="button button-secondary" href="{{ url_for('admin.audit_csv') }}">{{ icon('download') }} Export CSV</a>
+</div>
 
 <section class="card">
   {% if not rows %}
-    <p class="muted">Nothing logged yet.</p>
+    <div class="empty">{{ icon('activity') }}<br>Nothing logged yet.</div>
   {% else %}
     <div class="table-scroll">
     <table class="list">
       <tr><th>When</th><th>Who</th><th>What</th><th>Target</th><th>Details</th></tr>
       {% for r in rows %}
+        {% set tone = 'bad' if r.action in ('CERT_REVOKED', 'REQUEST_REJECTED', 'APPROVAL_FAILED')
+                      else 'ok' if r.action in ('CERT_ISSUED', 'REQUEST_APPROVED', 'FILE_SIGNED')
+                      else 'warn' if r.action in ('REQUEST_SUBMITTED', 'P12_PASSWORD_SHOWN')
+                      else 'muted' %}
         <tr>
           <td class="nowrap">{{ r.ts }}</td>
           <td>{{ r.actor }}</td>
-          <td><code>{{ r.action }}</code></td>
+          <td><span class="badge badge-{{ tone }}">{{ r.action }}</span></td>
           <td><code>{{ r.target or '' }}</code></td>
           <td>{{ r.details or '' }}</td>
         </tr>

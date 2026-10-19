@@ -1,26 +1,42 @@
 {% extends "base.html" %}
+{% from "_macros.html" import icon %}
 {% block title %}Request a certificate - VIT Campus CA Portal{% endblock %}
 
 {% block content %}
-<h1>Request a certificate</h1>
+<div class="page-head">
+  <div>
+    <span class="eyebrow">{{ icon('upload') }} Applicants</span>
+    <h1>Request a certificate</h1>
+    <p class="lead">Three steps: who you are, your details and certificate type, and your key.</p>
+  </div>
+</div>
+
+<ol class="progress">
+  <li class="{{ 'done' if role else 'now' }}">Choose your role</li>
+  <li class="{{ 'now' if role else '' }}">Details and certificate type</li>
+  <li>Submit and wait for the RA</li>
+</ol>
 
 {% if not role %}
   {# Step 1: the role decides which templates are offered (report: role -> allowed templates). #}
-  <p class="lead">First, tell us who you are. That decides which certificates you can ask for.</p>
   <div class="role-grid">
     <a class="role-card" href="{{ url_for('user.enroll', role='student') }}">
+      <span class="role-icon">{{ icon('user') }}</span>
       <span class="role-title">I am a student</span>
       <span class="muted">Student login (TLS client) &middot; Code signing</span>
+      <span class="role-go">Continue {{ icon('arrow-right') }}</span>
     </a>
     <a class="role-card" href="{{ url_for('user.enroll', role='faculty') }}">
+      <span class="role-icon">{{ icon('users') }}</span>
       <span class="role-title">I am faculty</span>
       <span class="muted">E-mail (S/MIME) &middot; Code signing &middot; TLS server</span>
+      <span class="role-go">Continue {{ icon('arrow-right') }}</span>
     </a>
   </div>
 {% else %}
   <p class="muted">Applying as <strong>{{ role }}</strong> &middot; <a href="{{ url_for('user.enroll') }}">change</a></p>
 
-  {% if error %}<div class="flash flash-error"><strong>Not submitted:</strong> {{ error }}</div>{% endif %}
+  {% if error %}<div class="flash flash-error">{{ icon('alert') }}<span><strong>Not submitted:</strong> {{ error }}</span></div>{% endif %}
 
   <form class="card form" method="post" enctype="multipart/form-data"
         action="{{ url_for('user.enroll', role=role) }}">
@@ -52,9 +68,11 @@
                  {% if form.get('template') == t.name or (not form.get('template') and loop.first) %}checked{% endif %}>
           <span>
             <strong>{{ t.title }}</strong> <code>{{ t.name }}</code>
-            <span class="muted option-detail">
-              {% if t.key_type == 'EC' %}EC P-256 key{% else %}RSA key, at least {{ t.rsa_bits }} bits{% endif %}
-              &middot; valid {{ t.days }} days
+            <span class="chips">
+              <span class="chip">{{ icon('key') }} {% if t.key_type == 'EC' %}EC P-256{% else %}RSA &ge; {{ t.rsa_bits }} bits{% endif %}</span>
+              <span class="chip">{{ icon('clock') }} {{ t.days }} days</span>
+              {% if t.san_email %}<span class="chip">{{ icon('mail') }} your e-mail in the certificate</span>{% endif %}
+              {% if t.san_dns %}<span class="chip">{{ icon('globe') }} needs DNS names</span>{% endif %}
             </span>
           </span>
         </label>
@@ -69,7 +87,7 @@
     <h2><span class="step">3</span> Your key <span class="muted">(choose one)</span></h2>
     <div class="key-options">
       <div class="key-option">
-        <h3>A. Upload a CSR <span class="tag">recommended</span></h3>
+        <h3>{{ icon('upload') }} A. Upload a CSR <span class="tag">RECOMMENDED</span></h3>
         <p class="muted">You make the key pair yourself; only the request is sent. Your private key
            never leaves your computer.</p>
         <label for="csr_file">Certificate request (PEM or DER)</label>
@@ -83,16 +101,16 @@
         </details>
       </div>
       <div class="key-option key-option-demo">
-        <h3>B. Demo mode</h3>
+        <h3>{{ icon('key') }} B. Demo mode</h3>
         <label class="checkbox">
           <input type="checkbox" name="demo_mode" {% if form.get('demo_mode') %}checked{% endif %}>
-          Let the server create my key and give me a password-protected <code>.p12</code> file
+          <span>Let the server create my key and give me a password-protected <code>.p12</code> file</span>
         </label>
-        <div class="banner-demo">DEMO ONLY - in real PKI the private key never leaves the user.</div>
+        <div class="banner-demo">{{ icon('alert') }}<span>DEMO ONLY - in real PKI the private key never leaves the user.</span></div>
       </div>
     </div>
 
-    <button type="submit" class="button-large">Submit request</button>
+    <button type="submit" class="button-large">{{ icon('arrow-right') }} Submit request</button>
   </form>
 {% endif %}
 {% endblock %}
