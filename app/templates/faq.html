@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}FAQ - VIT Campus CA Portal{% endblock %}
+
+{# One question: a <details> element, so the answer opens and closes without any JavaScript. #}
+{% macro q(question) -%}
+  <details class="faq-item">
+    <summary>{{ question }}</summary>
+    <div class="faq-answer">{{ caller() }}</div>
+  </details>
+{%- endmacro %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <span class="eyebrow">{{ icon('help') }} Help</span>
+    <h1>Frequently asked questions</h1>
+    <p class="lead">Short answers about certificates, this portal and the messages it shows. Click a question to open it.</p>
+  </div>
+  <a class="button button-secondary" href="{{ url_for('user.guide') }}">{{ icon('compass') }} Guided tour</a>
+</div>
+
+<nav class="tabs faq-topics" aria-label="Topics">
+  <a href="#basics">The basics</a>
+  <a href="#requesting">Requesting</a>
+  <a href="#downloading">Downloading and keys</a>
+  <a href="#signing">Signing and verifying</a>
+  <a href="#ra">RA and revocation</a>
+  <a href="#trouble">Problems and messages</a>
+</nav>
+
+<section class="card faq-group" id="basics">
+  <h2>{{ icon('shield') }} The basics</h2>
+  {% call q('What is this portal?') %}
+    <p>A small Public Key Infrastructure (PKI) for VIT. Students and faculty request digital certificates, a
+       Registration Authority (RA) checks who they are, and the Issuing CA signs the certificates. Anyone can then
+       check a certificate, or a file signed with one, against the VIT Root CA.</p>
+  {% endcall %}
+  {% call q('What is a digital certificate?') %}
+    <p>A small signed file that binds a public key to a person or a server: "this key belongs to Asha Rao, VIT,
+       registration number 21BCE0001". The CA's signature on it is what makes others believe that statement.
+       It also says what the key may be used for and until when.</p>
+  {% endcall %}
+  {% call q('Why are there two CAs, a Root CA and an Issuing CA?') %}
+    <p>The <strong>Root CA</strong> is the anchor everyone trusts, so its private key is kept offline and used only
+       once: to sign the Issuing CA's certificate. The <strong>Issuing CA</strong> is online and signs the everyday
+       certificates. If the online CA were ever compromised, it could be replaced without changing the root that
+       everyone trusts.</p>
+  {% endcall %}
+  {% call q('What does the RA do?') %}
+    <p>The Registration Authority checks the applicant's identity, for example against the VIT ID card, and then
+       approves or rejects the request. It never signs anything itself: on approval, the Issuing CA signs.</p>
+  {% endcall %}
+  {% call q('Which certificate types are there, and who can get them?') %}
+    <div class="table-scroll">
+    <table class="list">
+      <tr><th>Type</th><th>Who</th><th>Key</th><th>Valid for</th><th>Used for</th></tr>
+      <tr><td>Student login</td><td>Students</td><td>RSA, 2048 bits or more</td><td>365 days</td><td>Logging in (TLS client)</td></tr>
+      <tr><td>Faculty e-mail</td><td>Faculty</td><td>RSA, 2048 bits or more</td><td>730 days</td><td>Signing and encrypting e-mail (S/MIME)</td></tr>
+      <tr><td>TLS server</td><td>Faculty</td><td>EC P-256</td><td>365 days</td><td>A lab server's HTTPS (needs DNS names)</td></tr>
+      <tr><td>Code and document signing</td><td>Students and faculty</td><td>RSA, 3072 bits or more</td><td>730 days</td><td>Signing files and code</td></tr>
+    </table>
+    </div>
+  {% endcall %}
+</section>
+
+<section class="card faq-group" id="requesting">
+  <h2>{{ icon('upload') }} Requesting a certificate</h2>
+  {% call q('What is a CSR, and how do I make one?') %}
+    <p>A certificate signing request: your public key, signed with your private key. Sending it proves you hold the
+       key without ever revealing it. With OpenSSL (Git Bash):</p>
+    <pre>openssl req -new -newkey rsa:2048 -nodes -keyout my.key -out my.csr -subj "/CN=me"</pre>
+    <p>For code signing use <code>rsa:3072</code>. Or run <code>python scripts/make_sample_csrs.py</code> and pick
+       a ready-made file from <code>demo_work/</code>.</p>
+  {% endcall %}
+  {% call q('Should I upload a CSR or use demo mode?') %}
+    <p>Uploading a CSR is the real way: your private key never leaves your computer. Demo mode lets the server
+       create the key for you and hand it over in a password-protected <code>.p12</code> file. It is convenient for
+       a demonstration, but in a real PKI nobody but you should ever have your private key.</p>
+  {% endcall %}
+  {% call q('Why does my certificate not show the name I put in my CSR?') %}
+    <p>On purpose. The CA ignores the name and any extras requested inside a CSR, and uses only its public key. The
+       certificate carries the details you typed in the form, which the RA checks against your ID, and every other
+       field comes from the certificate type. Otherwise anyone could ask for a certificate in someone else's name.</p>
+  {% endcall %}
+  {% call q('I lost my tracking ID. What now?') %}
+    <p>The ID is random, so it cannot be looked up from your name. Submit a new request; the RA can reject the
+       old one.</p>
+  {% endcall %}
+  {% call q('How long does approval take?') %}
+    <p>Until an RA officer reviews it. Your status page shows "Waiting for the RA" until then, and changes to
+       approved (with downloads) or rejected (with the reason).</p>
+  {% endcall %}
+</section>
+
+<section class="card faq-group" id="downloading">
+  <h2>{{ icon('download') }} Downloading and keys</h2>
+  {% call q('What are cert.pem, chain.pem and cert.p12?') %}
+    <p><code>cert.pem</code> is your certificate. <code>chain.pem</code> holds the Issuing CA and Root CA
+       certificates that vouch for it. <code>cert.p12</code> (demo mode only) contains your private key, your
+       certificate and the chain, locked with a password. Check your certificate with
+       <code>openssl verify -CAfile root-ca.crt -untrusted chain.pem cert.pem</code>.</p>
+  {% endcall %}
+  {% call q('I lost the .p12 password. Can it be shown again?') %}
+    <p>No. It is shown once and then deleted from the server, so nobody, not even the RA, can read it later. Ask the
+       RA to revoke that certificate and submit a new request.</p>
+  {% endcall %}
+  {% call q('My private key may have leaked. What should I do?') %}
+    <p>Tell the RA straight away so the certificate is revoked with the reason <em>keyCompromise</em>. From that
+       moment every verifier rejects it, even though it has not expired.</p>
+  {% endcall %}
+</section>
+
+<section class="card faq-group" id="signing">
+  <h2>{{ icon('pen') }} Signing and verifying files</h2>
+  {% call q('What does a signature on a file prove?') %}
+    <p>Two things: the file has not changed by a single byte since it was signed, and it was signed with the private
+       key of a named person whose certificate the VIT CA issued. Because only that person holds the key, they cannot
+       easily deny having signed it (non-repudiation).</p>
+  {% endcall %}
+  {% call q('Which certificate can sign files?') %}
+    <p>Only a <strong>Code and document signing</strong> certificate. Others are refused when you sign, and fail
+       check 4 when someone verifies.</p>
+  {% endcall %}
+  {% call q('What are the five checks on the verify page?') %}
+    <ol class="chain">
+      <li><strong>File hash matches</strong><span>the file is exactly the one that was signed.</span></li>
+      <li><strong>Signature is valid</strong><span>the signature was made with the key in the signer's certificate.</span></li>
+      <li><strong>Chains to the VIT Root CA</strong><span>signer &rarr; Issuing CA &rarr; Root, every link checked.</span></li>
+      <li><strong>Code-signing, valid when signed</strong><span>the right kind of certificate, valid at the signing time.</span></li>
+      <li><strong>Not revoked</strong><span>not on the current revocation list signed by the CA.</span></li>
+    </ol>
+    <p>The result is VALID only when all five pass.</p>
+  {% endcall %}
+  {% call q('I changed nothing, but now the signature is NOT VALID. Why?') %}
+    <p>Most likely the signer's certificate has been revoked: check 5 fails. A revoked certificate is never accepted,
+       even for files signed before the revocation, because the signing time in the <code>.sig.json</code> is only the
+       signer's own claim.</p>
+  {% endcall %}
+  {% call q('Can I verify without this website?') %}
+    <p>Yes: <code>python tools/verify_file.py --file report.pdf</code> runs the same five checks, and every check can
+       also be done by hand with OpenSSL (see <code>docs/VERIFY_WITH_OPENSSL.md</code>).</p>
+  {% endcall %}
+</section>
+
+<section class="card faq-group" id="ra">
+  <h2>{{ icon('inbox') }} RA and revocation</h2>
+  {% call q('What happens when a certificate is revoked?') %}
+    <p>It is marked revoked with a reason, and the Issuing CA immediately signs a new certificate revocation list
+       (CRL) with the next CRL number, published at <a href="{{ url_for('user.crl_pem') }}">/crl.pem</a>. The OCSP
+       responder and the status API answer "revoked" from then on.</p>
+  {% endcall %}
+  {% call q('Can a revocation be undone?') %}
+    <p>No. Revocation is permanent. If it was a mistake, the person requests a new certificate.</p>
+  {% endcall %}
+  {% call q('What is the difference between a CRL and OCSP?') %}
+    <p>A CRL is the whole list of revoked certificates, signed by the CA and valid for 7 days, which verifiers
+       download. OCSP answers about one certificate at a time ("good", "revoked" or "unknown") with a fresh signed
+       reply.</p>
+  {% endcall %}
+  {% call q('Why is there no login for the RA pages?') %}
+    <p>It is a shortcut for the demonstration, which is also why the portal only listens on this computer
+       (127.0.0.1). A real RA would sign in with multi-factor authentication, and every decision would be recorded
+       under that person's name.</p>
+  {% endcall %}
+</section>
+
+<section class="card faq-group" id="trouble">
+  <h2>{{ icon('alert') }} Problems and messages</h2>
+  {% call q('"Setup needed: the CA does not exist yet."') %}
+    <p>The Root CA and Issuing CA have not been created. Set <code>ROOT_CA_PASS</code> and <code>ISSUING_CA_PASS</code>,
+       run <code>python scripts/bootstrap_ca.py</code>, then restart the portal.</p>
+  {% endcall %}
+  {% call q('"The Issuing CA key is locked."') %}
+    <p>The portal cannot unlock the CA's private key. Set <code>ISSUING_CA_PASS</code> in the terminal that runs
+       <code>python run.py</code> and restart it.</p>
+  {% endcall %}
+  {% call q('"RSA key too small" or "needs an EC P-256 key"') %}
+    <p>Your key does not fit the certificate type: student login and faculty e-mail need RSA of at least 2048 bits,
+       code signing at least 3072 bits, and a TLS server an EC P-256 key. Make a new CSR with the right key.</p>
+  {% endcall %}
+  {% call q('"the CSR signature is invalid"') %}
+    <p>The CSR was damaged or altered after it was made, so it no longer proves you hold the key. Create it again.</p>
+  {% endcall %}
+  {% call q('"choose ONE: upload a CSR, or tick demo mode"') %}
+    <p>Use either your own CSR or demo mode, not both (and not neither).</p>
+  {% endcall %}
+  {% call q('"could not open the .p12 file: wrong password"') %}
+    <p>The password does not match the <code>.p12</code>, or the file is not a <code>.p12</code>. Passwords are
+       case-sensitive.</p>
+  {% endcall %}
+  {% call q('Is this portal safe to use for real certificates?') %}
+    <p>No. It is a teaching demo. Several parts are deliberately simplified, such as no RA login, server-side keys in
+       demo mode and the CA key in memory; <code>docs/SECURITY_NOTES.md</code> lists each one and what a production
+       CA does instead.</p>
+  {% endcall %}
+</section>
+
+<section class="card tour-end">
+  <h2>{{ icon('compass') }} Still unsure how it fits together?</h2>
+  <p>The guided tour walks one certificate through every step, from request to revocation.</p>
+  <p class="actions"><a class="button" href="{{ url_for('user.guide') }}">{{ icon('compass') }} Take the guided tour</a></p>
+</section>
+{% endblock %}

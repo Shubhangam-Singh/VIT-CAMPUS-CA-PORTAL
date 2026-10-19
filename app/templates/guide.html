@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Guided tour - VIT Campus CA Portal{% endblock %}
+
+{% macro step(number, role, title, page) -%}
+  <li class="tour-step">
+    <span class="tour-num">{{ number }}</span>
+    <div class="tour-body">
+      <div class="tour-meta"><span class="role-tag role-{{ role }}">{{ {'applicant': 'Applicant', 'ra': 'RA officer', 'anyone': 'Anyone'}[role] }}</span>
+        <span class="muted">{{ page }}</span></div>
+      <h2>{{ title }}</h2>
+      {{ caller() }}
+    </div>
+  </li>
+{%- endmacro %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <span class="eyebrow">{{ icon('compass') }} Help</span>
+    <h1>Guided tour</h1>
+    <p class="lead">Follow one certificate through its whole life: request, approval, download, signing a file,
+       verifying it, and revocation. It takes about ten minutes. Each stop says what to do, and what the PKI
+       is doing behind the scenes.</p>
+  </div>
+</div>
+
+<div class="grid-main-side">
+  <section class="card">
+    <h2>{{ icon('check-circle') }} Before you start</h2>
+    <ul class="checklist">
+      <li class="{{ 'ok' if ca_ready else 'todo' }}">{{ icon('check-circle' if ca_ready else 'alert') }}
+        <span><strong>The CA exists.</strong>
+        {% if ca_ready %}Done: the Root CA and the Issuing CA have been created.
+        {% else %}Not yet: run <code>python scripts/bootstrap_ca.py</code> with <code>ROOT_CA_PASS</code> and
+        <code>ISSUING_CA_PASS</code> set, then restart the portal.{% endif %}</span></li>
+      <li class="{{ 'ok' if ca_ready and ca_key_available else 'todo' }}">{{ icon('check-circle' if ca_ready and ca_key_available else 'alert') }}
+        <span><strong>The Issuing CA key can be unlocked.</strong>
+        {% if ca_ready and ca_key_available %}Done: approvals and revocations will work.
+        {% else %}Set <code>ISSUING_CA_PASS</code> in the terminal that runs <code>python run.py</code>.{% endif %}</span></li>
+      <li class="ok">{{ icon('file') }}
+        <span><strong>Something to send (optional).</strong> <code>python scripts/make_sample_csrs.py</code> writes
+        ready-made certificate requests into <code>demo_work/</code>. Or skip it and use demo mode in step 2.</span></li>
+    </ul>
+  </section>
+
+  <aside class="card">
+    <h2>{{ icon('users') }} Who does what</h2>
+    <ul class="chain">
+      <li><span class="role-tag role-applicant">Applicant</span><span>A student or faculty member who wants a certificate.</span></li>
+      <li><span class="role-tag role-ra">RA officer</span><span>Checks the applicant's identity and approves or rejects. Signs nothing.</span></li>
+      <li><span class="role-tag role-anyone">Anyone</span><span>Can check a signed file or a certificate's status. Needs no account.</span></li>
+    </ul>
+  </aside>
+</div>
+
+<ol class="tour">
+  {% call step(1, 'applicant', 'Choose who you are', 'Request a certificate') %}
+    <p><strong>Do this:</strong> open <em>Request a certificate</em> and pick <em>I am a student</em> or <em>I am faculty</em>.</p>
+    <p class="tour-why">{{ icon('shield-check') }}<span><strong>Behind the scenes:</strong> your role decides which
+      certificate types you may ask for. Students: login and code signing. Faculty: e-mail (S/MIME), code signing
+      and TLS server.</span></p>
+    <a class="button button-secondary" href="{{ url_for('user.enroll') }}">Open this page {{ icon('arrow-right') }}</a>
+  {% endcall %}
+
+  {% call step(2, 'applicant', 'Fill in your details and choose your key', 'Request a certificate') %}
+    <p><strong>Do this:</strong> type your name, VIT e-mail and registration number, and pick a certificate type.
+      Then either upload a CSR (for example one from <code>demo_work/</code>) or tick <em>demo mode</em>.
+      To try signing later in this tour, choose <strong>Code and document signing</strong> with demo mode.</p>
+    <p class="tour-why">{{ icon('shield-check') }}<span><strong>Behind the scenes:</strong> the portal checks the
+      CSR straight away. Its signature proves you hold the private key, and the key must be big enough for the
+      type. The name inside the CSR is ignored: the certificate will carry the details the RA verifies.</span></p>
+    <a class="button button-secondary" href="{{ url_for('user.enroll') }}">Open this page {{ icon('arrow-right') }}</a>
+  {% endcall %}
+
+  {% call step(3, 'applicant', 'Keep your tracking ID', 'Track a request') %}
+    <p><strong>Do this:</strong> after submitting you land on your status page, with an ID like
+      <code>REQ-3F9A1C07B2D4</code>. Bookmark the page or write the ID down; <em>Track a request</em> brings you back.</p>
+    <p class="tour-why">{{ icon('shield-check') }}<span><strong>Behind the scenes:</strong> the ID is random (48 bits),
+      so nobody can guess someone else's request. The submission is written to the audit log.</span></p>
+    <a class="button button-secondary" href="{{ url_for('user.status_lookup') }}">Open this page {{ icon('arrow-right') }}</a>
+  {% endcall %}
+
+  {% call step(4, 'ra', 'Review and approve the request', 'RA dashboard') %}
+    <p><strong>Do this:</strong> on the <em>RA dashboard</em>, compare the name, e-mail and registration number with
+      the applicant's VIT ID card. Then press <em>Approve and issue</em>, or type a reason and press <em>Reject</em>.</p>
+    <p class="tour-why">{{ icon('shield-check') }}<span><strong>Behind the scenes:</strong> on approval the Issuing CA
+      signs the certificate. The subject comes from the verified details, every extension from the certificate type,
+      and the serial number is 128 random bits. The Root CA is not involved: it stays offline.</span></p>
+    <a class="button button-secondary" href="{{ url_for('admin.dashboard') }}">Open this page {{ icon('arrow-right') }}</a>
+  {% endcall %}
+
+  {% call step(5, 'applicant', 'Download your certificate', 'Your status page') %}
+    <p><strong>Do this:</strong> open your status page again and download <code>cert.pem</code> and
+      <code>chain.pem</code>. In demo mode a password is shown <strong>once</strong>: write it down, then download
+      <code>cert.p12</code> (your key and certificate in one protected file).</p>
+    <p class="tour-why">{{ icon('shield-check') }}<span><strong>Behind the scenes:</strong> the password is deleted
+      from the server as soon as it has been shown, and the RA never sees it. <code>chain.pem</code> holds the
+      Issuing CA and Root CA certificates, so anyone can check your certificate.</span></p>
+    <a class="button button-secondary" href="{{ url_for('user.status_lookup') }}">Find your request {{ icon('arrow-right') }}</a>
+  {% endcall %}
+
+  {% call step(6, 'applicant', 'Sign a file', 'Sign a file') %}
+    <p><strong>Do this:</strong> on <em>Sign a file</em>, choose your code-signing <code>.p12</code>, type its
+      password and pick any file, such as a PDF. You get back <code>&lt;file&gt;.sig.json</code>: keep it next to the file.</p>
+    <p class="tour-why">{{ icon('shield-check') }}<span><strong>Behind the scenes:</strong> the portal signs the file's
+      SHA-256 hash with RSA-PSS. Only code-signing certificates may sign. In real life you sign on your own computer
+      with <code>tools/sign_file.py</code>, so your private key never leaves it.</span></p>
+    <a class="button button-secondary" href="{{ url_for('user.sign_page') }}">Open this page {{ icon('arrow-right') }}</a>
+  {% endcall %}
+
+  {% call step(7, 'anyone', 'Verify the signature, then tamper with the file', 'Verify a signature') %}
+    <p><strong>Do this:</strong> upload the file and its <code>.sig.json</code> on <em>Verify a signature</em>: all
+      five checks pass and the signer is named. Now change a single character in the file and verify again.</p>
+    <p class="tour-why">{{ icon('shield-check') }}<span><strong>Behind the scenes:</strong> the only thing trusted is
+      the VIT Root CA certificate. The five checks are: the file hash, the signature, the chain to the Root CA, a
+      code-signing certificate valid at signing time, and not revoked. One changed byte fails the first check.</span></p>
+    <a class="button button-secondary" href="{{ url_for('user.verify_page') }}">Open this page {{ icon('arrow-right') }}</a>
+  {% endcall %}
+
+  {% call step(8, 'ra', 'Revoke the certificate', 'Certificates') %}
+    <p><strong>Do this:</strong> under <em>Certificates</em>, open the code-signing certificate, choose a reason (for
+      example <em>keyCompromise</em>) and press <em>Revoke</em>. Then verify the original, untouched file again.</p>
+    <p class="tour-why">{{ icon('shield-check') }}<span><strong>Behind the scenes:</strong> the Issuing CA signs a new
+      revocation list (CRL) with the next CRL number, published at <code>/crl.pem</code>, and the OCSP responder now
+      answers "revoked". The signature fails check 5, even though the file never changed.</span></p>
+    <a class="button button-secondary" href="{{ url_for('admin.certificates') }}">Open this page {{ icon('arrow-right') }}</a>
+  {% endcall %}
+
+  {% call step(9, 'ra', 'Read the audit log', 'Audit log') %}
+    <p><strong>Do this:</strong> open the <em>Audit log</em>. Every step you just took is there, with who did it and
+      when. <em>Export CSV</em> downloads the whole log.</p>
+    <p class="tour-why">{{ icon('shield-check') }}<span><strong>Behind the scenes:</strong> accountability. An auditor
+      can see who requested, approved, downloaded, signed and revoked, and in what order.</span></p>
+    <a class="button button-secondary" href="{{ url_for('admin.audit_log') }}">Open this page {{ icon('arrow-right') }}</a>
+  {% endcall %}
+</ol>
+
+<section class="card tour-end">
+  <h2>{{ icon('award') }} That is the whole lifecycle</h2>
+  <p>Request &rarr; identity check &rarr; issue &rarr; use &rarr; verify &rarr; revoke. Questions left?
+     The FAQ explains the terms and the error messages you may meet.</p>
+  <p class="actions">
+    <a class="button" href="{{ url_for('user.faq') }}">{{ icon('help') }} Read the FAQ</a>
+    <a class="button button-secondary" href="{{ url_for('user.enroll') }}">{{ icon('upload') }} Start with step 1</a>
+  </p>
+</section>
+{% endblock %}

@@ -47,6 +47,20 @@ def home():
 
 
 # --------------------------------------------------------------------------------------
+# Help: a guided tour of the whole certificate lifecycle, and frequently asked questions
+# --------------------------------------------------------------------------------------
+
+@bp.route("/guide")
+def guide():
+    return render_template("guide.html")
+
+
+@bp.route("/faq")
+def faq():
+    return render_template("faq.html")
+
+
+# --------------------------------------------------------------------------------------
 # Enrollment
 # --------------------------------------------------------------------------------------
 

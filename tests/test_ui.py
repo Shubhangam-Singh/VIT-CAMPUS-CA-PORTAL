@@ -1,5 +1,6 @@
-"""UI checks: the setup-health banner, the home dashboard, the track page, navigation and error pages."""
+"""UI checks: the setup-health banner, the home dashboard, the track page, navigation, help pages and error pages."""
 import io
+import re
 
 from cryptography.hazmat.primitives import serialization
 
@@ -54,6 +55,41 @@ def test_navigation_marks_the_current_page(app):
     page = text(app.test_client().get("/enroll"))
     assert 'href="/enroll" class="active"' in page
     assert 'href="/admin/" class=""' in page
+
+
+def test_guided_tour_has_nine_steps_and_says_the_ca_is_ready(ca_app):
+    page = text(ca_app.test_client().get("/guide"))
+    assert page.count('class="tour-num"') == 9
+    assert "Done: the Root CA and the Issuing CA have been created." in page
+
+
+def test_guided_tour_says_what_to_do_when_there_is_no_ca(app, tmp_path):
+    app.config["ISSUING_DIR"] = tmp_path / "no-ca-here"
+    page = text(app.test_client().get("/guide"))
+    assert "Not yet: run <code>python scripts/bootstrap_ca.py</code>" in page
+
+
+def test_faq_answers_open_without_javascript(app):
+    page = text(app.test_client().get("/faq"))
+    assert page.count('<details class="faq-item">') >= 25 and "<script" not in page
+    for topic in ("basics", "requesting", "downloading", "signing", "ra", "trouble"):
+        assert f'href="#{topic}"' in page and f'id="{topic}"' in page
+
+
+def test_every_link_on_the_help_pages_works(ca_app):
+    web = ca_app.test_client()
+    for url in ("/guide", "/faq"):
+        page = text(web.get(url))
+        links = set(re.findall(r'href="(/[^"#]*)"', page)) - {"/static/style.css"}
+        assert links, url
+        for link in links:
+            assert web.get(link).status_code in (200, 302), f"{url} links to {link}"
+
+
+def test_help_links_are_on_every_page(app):
+    for url in ("/", "/enroll", "/admin/"):
+        page = text(app.test_client().get(url))
+        assert 'href="/guide"' in page and 'href="/faq"' in page
 
 
 def test_friendly_404_page(app):

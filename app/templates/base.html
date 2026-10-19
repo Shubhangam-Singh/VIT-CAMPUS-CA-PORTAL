@@ -22,6 +22,10 @@
         <span class="brand-sub">Public Key Infrastructure &middot; VIT Vellore</span>
       </span>
     </a>
+    <nav class="header-help" aria-label="Help">
+      {{ navlink('user.guide', 'Guided tour', 'compass') }}
+      {{ navlink('user.faq', 'FAQ', 'help') }}
+    </nav>
     <nav class="nav" aria-label="Main">
       <div class="nav-group">
         <span class="nav-label">Applicants</span>
@@ -80,6 +84,8 @@
       <a href="{{ url_for('user.crl_pem') }}">{{ icon('list') }} CRL (PEM)</a>
       <a href="{{ url_for('user.crl_der') }}">{{ icon('list') }} CRL (DER)</a>
       <a href="{{ url_for('user.verify_page') }}">{{ icon('check-circle') }} Verify a signature</a>
+      <a href="{{ url_for('user.guide') }}">{{ icon('compass') }} Guided tour</a>
+      <a href="{{ url_for('user.faq') }}">{{ icon('help') }} FAQ</a>
     </div>
   </div>
 </footer>
