@@ -1,0 +1,56 @@
+/* VIT Campus CA Portal - plain CSS, no framework. */
+
+:root {
+  --navy: #12355b;
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --text: #1c2733;
+  --muted: #5b6b7b;
+  --border: #d8dee6;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--bg);
+}
+
+.container {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+/* ---- header and footer ---- */
+.site-header { background: var(--navy); padding: 0.9rem 0; }
+.brand { color: #fff; font-size: 1.15rem; font-weight: 700; text-decoration: none; }
+
+main.container { flex: 1; padding-top: 2rem; padding-bottom: 2rem; }
+
+.site-footer { border-top: 1px solid var(--border); padding: 1rem 0; color: var(--muted); font-size: 0.9rem; }
+
+/* ---- home page ---- */
+.hero h1 { margin: 0 0 0.5rem; font-size: 2rem; color: var(--navy); }
+.lead { margin: 0; font-size: 1.1rem; color: var(--muted); }
+
+.card {
+  margin-top: 1.5rem;
+  padding: 1.25rem 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.card h2 { margin-top: 0; font-size: 1.15rem; color: var(--navy); }
+
+.chain { margin: 0; padding-left: 1.25rem; }
+.chain li { margin-bottom: 0.7rem; }
+.chain li:last-child { margin-bottom: 0; }
+.chain span { display: block; color: var(--muted); font-size: 0.95rem; }

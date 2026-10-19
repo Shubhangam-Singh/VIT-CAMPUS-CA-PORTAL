@@ -1,0 +1,4 @@
+# Git on Windows (core.autocrlf=true) would turn shell scripts into CRLF, and bash then
+# fails with "$'\r': command not found". Force LF for them.
+* text=auto
+*.sh text eol=lf

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero">
+  <h1>VIT Campus CA Portal</h1>
+  <p class="lead">
+    A small Public Key Infrastructure for the VIT Vellore campus. Students and faculty
+    request X.509 certificates, the Registration Authority approves them, and the
+    Issuing CA signs them.
+  </p>
+</section>
+
+<section class="card">
+  <h2>How the trust chain works</h2>
+  <ol class="chain">
+    <li>
+      <strong>Root CA</strong>
+      <span>Kept offline. Self-signed. It signs only the Issuing CA certificate.</span>
+    </li>
+    <li>
+      <strong>Issuing CA</strong>
+      <span>Online. Signs end-entity certificates and publishes the revocation list (CRL).</span>
+    </li>
+    <li>
+      <strong>Registration Authority (RA)</strong>
+      <span>Checks who the applicant is and approves or rejects the request. It signs nothing itself.</span>
+    </li>
+    <li>
+      <strong>End-entity certificates</strong>
+      <span>Student login, faculty e-mail, server TLS and code signing certificates.</span>
+    </li>
+  </ol>
+</section>
+{% endblock %}

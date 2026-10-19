@@ -1,0 +1,15 @@
+# ---- Secrets and generated PKI material: NEVER commit these ----
+*.key
+*.p12
+*.pfx
+*.db
+ca/
+existing_ca/
+instance/
+.env
+
+# ---- Python / tooling ----
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
