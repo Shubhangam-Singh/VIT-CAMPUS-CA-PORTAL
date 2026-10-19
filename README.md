@@ -129,6 +129,28 @@ Check revocation with OpenSSL (Git Bash, from the project folder, with the porta
 
 A revoked certificate fails `verify` with `error 23 at 0 depth lookup: certificate revoked`.
 
+### Sign and verify files (non-repudiation)
+
+You need a **code_signing** certificate as a `.p12`. A demo-mode request gives you one directly. For a
+CSR-based request, combine your key with the issued certificate (Git Bash):
+
+    openssl pkcs12 -export -inkey demo_work/code_signing_rsa3072.key -in ca/issued/<serial>.pem \
+            -certfile ca/issuing/chain.pem -out demo_work/ravi.p12
+
+Sign (the .p12 password comes from `P12_PASSWORD`, or you are asked for it):
+
+    python tools/sign_file.py --p12 demo_work/ravi.p12 --file report.pdf        # writes report.pdf.sig.json
+
+Verify (prints a PASS/FAIL table; exit code 0 only if all five checks pass):
+
+    python tools/verify_file.py --file report.pdf --crl-url http://127.0.0.1:5000/crl.pem
+
+The five checks: (1) file hash matches, (2) RSA-PSS signature valid with the signer's public key,
+(3) certificate chains to our Root CA (root-ca.crt is the only trust anchor), (4) codeSigning EKU and
+`signed_at` within the certificate's validity, (5) not revoked on the current CRL. The same checks are on
+the web: `/verify` for anyone, and `/sign` as a demo only (it uploads the .p12). To do all five by hand
+with OpenSSL, see [docs/VERIFY_WITH_OPENSSL.md](docs/VERIFY_WITH_OPENSSL.md).
+
 ### 6. Run the tests
 
     pytest

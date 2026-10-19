@@ -185,6 +185,13 @@ pre { padding: 0.6rem 0.8rem; background: #f0f3f7; border-radius: 6px; overflow-
 .badge-demo { background: #ece6fb; color: #4b2d9a; }
 .badge-expired { background: #eceff3; color: #4a5562; }
 
+/* ---- signature verification ---- */
+.checks td { vertical-align: top; }
+.check-pass td:first-child { border-left: 4px solid var(--green); }
+.check-fail td:first-child { border-left: 4px solid var(--red); }
+.check-fail td { background: #fff7f6; }
+.signer-box { margin-bottom: 1rem; padding: 0.8rem 1rem; border-radius: 8px; background: var(--green-bg); border: 1px solid #b5dfc5; }
+
 /* ---- certificate list ---- */
 .list tr.expiring td { background: var(--amber-bg); }
 .expiring-key { padding: 0 0.3rem; background: var(--amber-bg); }
