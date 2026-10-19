@@ -3,15 +3,19 @@
 DEMO SHORTCUT: there is no login. Anyone who can open /admin acts as the RA (that is why the app
 only listens on 127.0.0.1). A real RA would sign in with MFA and only see its own department.
 """
+import csv
+import io
 import secrets
 from pathlib import Path
 
 from cryptography import x509
-from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
+from cryptography.hazmat.primitives import serialization
+from flask import Blueprint, Response, abort, current_app, flash, redirect, render_template, request, url_for
 
 from .audit import log_event
-from .ca_core import (Identity, IssuanceError, build_pkcs12, check_csr, demo_csr, generate_demo_key,
-                      issue_certificate, load_csr)
+from .ca_core import (REVOCATION_REASONS, Identity, IssuanceError, RevocationError, build_pkcs12, certificate_status,
+                      check_csr, demo_csr, describe_certificate, find_certificate, generate_demo_key,
+                      issue_certificate, load_csr, normalize_serial, now_utc, parse_iso, revoke_certificate)
 from .db import get_db
 from .templates_def import ROLE_TEMPLATES, TEMPLATES
 
@@ -124,3 +128,84 @@ def reject(request_id):
         log_event(RA_ACTOR, "REQUEST_REJECTED", row["tracking_id"], reason)
         flash(f"Rejected {row['tracking_id']}.", "success")
     return redirect(url_for("admin.dashboard"))
+
+
+# --------------------------------------------------------------------------------------
+# Certificate lifecycle (Phase 4)
+# --------------------------------------------------------------------------------------
+
+EXPIRY_WARNING_DAYS = 30     # highlight valid certificates that expire sooner than this
+
+
+@bp.route("/certs")
+def certificates():
+    now = now_utc()
+    items = []
+    for row in get_db().execute("SELECT * FROM certificates ORDER BY id DESC"):
+        status = certificate_status(row, now)
+        days_left = (parse_iso(row["not_after"]) - now).days
+        items.append({"row": row, "status": status, "days_left": days_left,
+                      "expiring": status == "valid" and days_left < EXPIRY_WARNING_DAYS})
+    counts = {s: sum(1 for i in items if i["status"] == s) for s in ("valid", "expired", "revoked")}
+    return render_template("certs.html", items=items, counts=counts, warning_days=EXPIRY_WARNING_DAYS)
+
+
+@bp.route("/certs/<serial>")
+def certificate_detail(serial):
+    row = find_certificate(normalize_serial(serial) or "")
+    if row is None:
+        abort(404)
+    cert = x509.load_pem_x509_certificate((Path(current_app.config["ISSUED_DIR"]) / row["pem_path"]).read_bytes())
+    tracking_id = None
+    if row["request_id"]:
+        tracking_id = get_db().execute("SELECT tracking_id FROM requests WHERE id = ?",
+                                       (row["request_id"],)).fetchone()[0]
+    return render_template("cert_detail.html", row=row, status=certificate_status(row), fields=describe_certificate(cert),
+                           pem=cert.public_bytes(serialization.Encoding.PEM).decode(), tracking_id=tracking_id,
+                           reasons=REVOCATION_REASONS)
+
+
+@bp.post("/certs/<serial>/revoke")
+def revoke(serial):
+    serial_hex = normalize_serial(serial) or serial
+    try:
+        crl = revoke_certificate(serial_hex, request.form.get("reason", ""), RA_ACTOR)
+    except (RevocationError, IssuanceError) as err:
+        flash(f"Not revoked: {err}", "error")
+    else:
+        number = crl.extensions.get_extension_for_class(x509.CRLNumber).value.crl_number
+        flash(f"Certificate {serial_hex} revoked. CRL #{number} published "
+              f"({len(list(crl))} revoked certificate(s), valid until {crl.next_update_utc:%Y-%m-%d %H:%M} UTC).",
+              "success")
+    return redirect(url_for("admin.certificate_detail", serial=serial_hex))
+
+
+# --------------------------------------------------------------------------------------
+# Audit log
+# --------------------------------------------------------------------------------------
+
+AUDIT_COLUMNS = ("id", "ts", "actor", "action", "target", "details")
+
+
+@bp.route("/audit")
+def audit_log():
+    rows = get_db().execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT 500").fetchall()
+    return render_template("audit.html", rows=rows)
+
+
+@bp.route("/audit.csv")
+def audit_csv():
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(AUDIT_COLUMNS)
+    for row in get_db().execute("SELECT * FROM audit_log ORDER BY id"):
+        writer.writerow([spreadsheet_safe(row[column]) for column in AUDIT_COLUMNS])
+    return Response(out.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=audit_log.csv"})
+
+
+def spreadsheet_safe(value):
+    """Stop text such as '=HYPERLINK(...)' (e.g. typed into a name field) running as an Excel formula."""
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@"):
+        return "'" + value
+    return value

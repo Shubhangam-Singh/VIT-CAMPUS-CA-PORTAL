@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Certificates - VIT Campus CA Portal{% endblock %}
+
+{% block content %}
+<h1>Issued certificates</h1>
+<p class="actions">
+  <span class="badge badge-approved">VALID {{ counts.valid }}</span>
+  <span class="badge badge-expired">EXPIRED {{ counts.expired }}</span>
+  <span class="badge badge-rejected">REVOKED {{ counts.revoked }}</span>
+  <a href="{{ url_for('user.crl_pem') }}">Current CRL (crl.pem)</a>
+</p>
+
+<section class="card">
+  {% if not items %}
+    <p class="muted">No certificates issued yet.</p>
+  {% else %}
+    <p class="muted">Rows in <span class="expiring-key">yellow</span> are valid but expire within {{ warning_days }} days.
+       "Expired" is worked out from the end date each time the page loads; it is never stored.</p>
+    <div class="table-scroll">
+    <table class="list">
+      <tr><th>Serial (hex)</th><th>Common name</th><th>Template</th><th>Status</th><th>Valid until</th><th>Days left</th></tr>
+      {% for item in items %}
+        {% set r = item.row %}
+        <tr class="{{ 'expiring' if item.expiring }}">
+          <td><a href="{{ url_for('admin.certificate_detail', serial=r.serial_hex) }}"><code>{{ r.serial_hex }}</code></a></td>
+          <td>{{ r.subject_cn }}</td>
+          <td><code>{{ r.template }}</code></td>
+          <td><span class="badge badge-{{ {'valid': 'approved', 'expired': 'expired', 'revoked': 'rejected'}[item.status] }}">{{ item.status | upper }}</span></td>
+          <td>{{ r.not_after[:10] }}</td>
+          <td>{{ item.days_left if item.status == 'valid' else '-' }}</td>
+        </tr>
+      {% endfor %}
+    </table>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

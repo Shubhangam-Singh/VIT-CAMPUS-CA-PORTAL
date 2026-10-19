@@ -42,6 +42,12 @@
 {% elif req.status == 'approved' %}
   <section class="card">
     <h2>Your certificate</h2>
+    {% if cert_status == 'revoked' %}
+      <div class="flash flash-error">This certificate was <strong>REVOKED</strong> on {{ cert.revoked_at }}
+        (reason: {{ cert.revocation_reason }}). It is listed on the CRL and must not be trusted any more.</div>
+    {% elif cert_status == 'expired' %}
+      <div class="flash flash-error">This certificate has <strong>EXPIRED</strong>.</div>
+    {% endif %}
     {% if cert %}
       <table class="details">
         <tr><th>Serial</th><td><code>{{ cert.serial_hex }}</code></td></tr>

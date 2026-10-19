@@ -183,6 +183,14 @@ pre { padding: 0.6rem 0.8rem; background: #f0f3f7; border-radius: 6px; overflow-
 .badge-approved { background: var(--green-bg); color: var(--green); }
 .badge-rejected { background: var(--red-bg); color: var(--red); }
 .badge-demo { background: #ece6fb; color: #4b2d9a; }
+.badge-expired { background: #eceff3; color: #4a5562; }
+
+/* ---- certificate list ---- */
+.list tr.expiring td { background: var(--amber-bg); }
+.expiring-key { padding: 0 0.3rem; background: var(--amber-bg); }
+.nowrap { white-space: nowrap; }
+.title-code { font-size: 1rem; vertical-align: middle; color: var(--muted); }
+select { padding: 0.45rem 0.5rem; border: 1px solid var(--border); border-radius: 6px; font: inherit; background: #fff; }
 
 /* ---- tables ---- */
 table { border-collapse: collapse; width: 100%; }

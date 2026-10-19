@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Certificate {{ row.serial_hex }} - VIT Campus CA Portal{% endblock %}
+
+{% block content %}
+<p class="muted"><a href="{{ url_for('admin.certificates') }}">&larr; All certificates</a></p>
+<h1>{{ row.subject_cn }} <code class="title-code">{{ row.template }}</code></h1>
+<p>
+  <span class="badge badge-{{ {'valid': 'approved', 'expired': 'expired', 'revoked': 'rejected'}[status] }}">{{ status | upper }}</span>
+  {% if status == 'revoked' %}
+    <span class="muted">revoked {{ row.revoked_at }} &middot; reason: <strong>{{ row.revocation_reason }}</strong></span>
+  {% endif %}
+  {% if tracking_id %}
+    <span class="muted">&middot; from request <a href="{{ url_for('user.request_status', tracking_id=tracking_id) }}">{{ tracking_id }}</a></span>
+  {% endif %}
+</p>
+
+<section class="card">
+  <h2>What the certificate says</h2>
+  <p class="muted">Read from the certificate file itself, not from the database.</p>
+  <table class="details">
+    {% for label, value in fields.items() %}
+      <tr><th>{{ label }}</th><td>{% if label in ('Serial number', 'SHA-256 fingerprint') %}<code>{{ value }}</code>{% else %}{{ value }}{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+</section>
+
+{% if status != 'revoked' %}
+<section class="card">
+  <h2>Revoke this certificate</h2>
+  <p class="muted">Revoking cannot be undone. A new CRL (next CRL number, valid 7 days) is signed by the
+     Issuing CA straight away and published at <a href="{{ url_for('user.crl_pem') }}">/crl.pem</a>.</p>
+  <form method="post" action="{{ url_for('admin.revoke', serial=row.serial_hex) }}" class="inline-form">
+    <label for="reason">Reason</label>
+    <select id="reason" name="reason" required>
+      <option value="">- choose -</option>
+      {% for name in reasons %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
+    </select>
+    <button type="submit" class="button-danger">Revoke</button>
+  </form>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Check it yourself</h2>
+  <p class="muted">Status as JSON: <a href="{{ url_for('user.api_status', serial=row.serial_hex) }}">/api/status/{{ row.serial_hex }}</a></p>
+  <details class="help">
+    <summary>Certificate (PEM)</summary>
+    <pre>{{ pem }}</pre>
+  </details>
+</section>
+{% endblock %}

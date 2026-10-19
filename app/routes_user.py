@@ -8,10 +8,12 @@ import secrets
 from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
-from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, send_file, url_for
+from flask import (Blueprint, Response, abort, current_app, flash, jsonify, redirect, render_template, request,
+                   send_file, url_for)
 
 from .audit import log_event
-from .ca_core import Identity, IssuanceError, check_csr, check_identity, load_csr
+from .ca_core import (Identity, IssuanceError, build_ocsp_response, certificate_status, check_csr, check_identity,
+                      current_crl, load_csr, lookup_status)
 from .db import get_db
 from .templates_def import ROLE_TEMPLATES, TEMPLATES, templates_for_role
 
@@ -132,6 +134,7 @@ def request_status(tracking_id):
         log_event(row["email"], "P12_PASSWORD_SHOWN", tracking_id, "shown once, then wiped from the database")
 
     response = render_template("request_status.html", req=row, cert=cert, p12_password=p12_password,
+                               cert_status=certificate_status(cert) if cert else None,
                                template=TEMPLATES[row["template"]])
     return response, 200, {"Cache-Control": "no-store"}
 
@@ -160,3 +163,33 @@ def download(tracking_id, filename):
     log_event(row["email"], "DOWNLOAD", tracking_id, filename)
     return send_file(path, mimetype=DOWNLOADS[filename], as_attachment=True,
                      download_name=f"{tracking_id}-{filename}")
+
+
+# --------------------------------------------------------------------------------------
+# Revocation information - public, anyone may check a certificate (Phase 4)
+# --------------------------------------------------------------------------------------
+
+@bp.route("/crl.pem")
+def crl_pem():
+    """The CRL Distribution Point written into every certificate."""
+    crl = current_crl()
+    return Response(crl.public_bytes(serialization.Encoding.PEM), mimetype="application/x-pem-file")
+
+
+@bp.route("/crl.der")
+def crl_der():
+    crl = current_crl()
+    return Response(crl.public_bytes(serialization.Encoding.DER), mimetype="application/pkix-crl")
+
+
+@bp.route("/api/status/<serial>")
+def api_status(serial):
+    """OCSP-like lookup: {"status": "good" | "revoked" | "expired" | "unknown", "revocation_time": ...}"""
+    return jsonify(lookup_status(serial))
+
+
+@bp.post("/ocsp")
+def ocsp_responder():
+    """A real OCSP responder (RFC 6960): try  openssl ocsp -url http://127.0.0.1:5000/ocsp ..."""
+    response = build_ocsp_response(request.get_data())
+    return Response(response.public_bytes(serialization.Encoding.DER), mimetype="application/ocsp-response")

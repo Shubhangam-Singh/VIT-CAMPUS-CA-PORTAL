@@ -106,6 +106,29 @@ Open http://127.0.0.1:5000 and try the workflow:
 
 Every step is recorded in the `audit_log` table (who, what, when).
 
+No CSR at hand? `python scripts/make_sample_csrs.py` writes ready-to-upload samples (and some the CA
+must refuse) into `demo_work/`.
+
+### Certificate lifecycle and revocation
+
+- **Certificates** (`/admin/certs`): every issued certificate with its status (valid / expired / revoked)
+  and days left; rows expiring within 30 days are highlighted. Click a serial for the parsed fields.
+- **Revoke** (on the detail page, or `python -m app.cli revoke --serial <hex> --reason keyCompromise`):
+  each revocation signs and publishes a new CRL (next CRL number, nextUpdate = +7 days).
+- **CRL**: `/crl.pem` and `/crl.der` (the CRL Distribution Point in every certificate).
+- **Status API**: `/api/status/<serial>` returns `good`, `revoked` (with time and reason), `expired` or `unknown`.
+- **OCSP**: `POST /ocsp` is a real OCSP responder (RFC 6960).
+- **Audit log** (`/admin/audit`) with CSV export.
+
+Check revocation with OpenSSL (Git Bash, from the project folder, with the portal running):
+
+    curl -s -o crl.pem http://127.0.0.1:5000/crl.pem
+    openssl crl -in crl.pem -text -noout
+    openssl verify -crl_check -CAfile ca/issuing/root-ca.crt -untrusted ca/issuing/issuing-ca.crt -CRLfile crl.pem ca/issued/<serial>.pem
+    openssl ocsp -issuer ca/issuing/issuing-ca.crt -cert ca/issued/<serial>.pem -url http://127.0.0.1:5000/ocsp -CAfile ca/issuing/chain.pem
+
+A revoked certificate fails `verify` with `error 23 at 0 depth lookup: certificate revoked`.
+
 ### 6. Run the tests
 
     pytest

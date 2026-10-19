@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Audit log - VIT Campus CA Portal{% endblock %}
+
+{% block content %}
+<h1>Audit log</h1>
+<p class="actions">
+  <a class="button button-secondary" href="{{ url_for('admin.audit_csv') }}">Export CSV</a>
+  <span class="muted">Who did what, and when (UTC). Newest first{% if rows | length == 500 %}, last 500 shown{% endif %}.</span>
+</p>
+
+<section class="card">
+  {% if not rows %}
+    <p class="muted">Nothing logged yet.</p>
+  {% else %}
+    <div class="table-scroll">
+    <table class="list">
+      <tr><th>When</th><th>Who</th><th>What</th><th>Target</th><th>Details</th></tr>
+      {% for r in rows %}
+        <tr>
+          <td class="nowrap">{{ r.ts }}</td>
+          <td>{{ r.actor }}</td>
+          <td><code>{{ r.action }}</code></td>
+          <td><code>{{ r.target or '' }}</code></td>
+          <td>{{ r.details or '' }}</td>
+        </tr>
+      {% endfor %}
+    </table>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

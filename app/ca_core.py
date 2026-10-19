@@ -23,7 +23,8 @@ from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.hazmat.primitives.serialization import pkcs12
-from cryptography.x509.oid import NameOID
+from cryptography.x509 import ocsp
+from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 from flask import current_app
 
 from .audit import log_event
@@ -362,3 +363,230 @@ def build_pkcs12(key, cert, chain, password, friendly_name):
     """A password-protected PKCS#12 (.p12) holding the private key, the certificate and the CA chain."""
     return pkcs12.serialize_key_and_certificates(
         friendly_name.encode("utf-8"), key, cert, chain, serialization.BestAvailableEncryption(password))
+
+
+# --------------------------------------------------------------------------------------
+# Certificate lifecycle: status, revocation and the CRL (Phase 4)
+# --------------------------------------------------------------------------------------
+
+# The revocation reasons the RA may choose (names as in RFC 5280), and their CRL codes.
+REVOCATION_REASONS = {
+    "keyCompromise": x509.ReasonFlags.key_compromise,
+    "cessationOfOperation": x509.ReasonFlags.cessation_of_operation,
+    "affiliationChanged": x509.ReasonFlags.affiliation_changed,
+    "superseded": x509.ReasonFlags.superseded,
+}
+CRL_VALID_DAYS = 7          # nextUpdate: relying parties must fetch a fresh CRL after this
+
+
+class RevocationError(Exception):
+    """The certificate cannot be revoked (unknown serial, bad reason, already revoked)."""
+
+
+def parse_iso(text):
+    """The opposite of iso(): '2026-10-19T09:30:00Z' -> a UTC datetime."""
+    return datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+
+
+def normalize_serial(text):
+    """Accept a serial the way people type it ('7A:4D:..', '0x7a4d..', with leading zeros or not)
+    and return the 32-digit lowercase hex used in the database, or None if it is not a serial."""
+    cleaned = text.strip().lower().replace(":", "").replace(" ", "")
+    if cleaned.startswith("0x"):
+        cleaned = cleaned[2:]
+    if not re.fullmatch(r"[0-9a-f]{1,40}", cleaned):
+        return None
+    return f"{int(cleaned, 16):032x}"
+
+
+def find_certificate(serial_hex):
+    return get_db().execute("SELECT * FROM certificates WHERE serial_hex = ?", (serial_hex,)).fetchone()
+
+
+def certificate_status(row, now=None):
+    """'revoked', 'expired' or 'valid'. "Expired" is never stored: it follows from not_after and the clock."""
+    if row["status"] == "revoked":
+        return "revoked"
+    if parse_iso(row["not_after"]) < (now or now_utc()):
+        return "expired"
+    return "valid"
+
+
+def lookup_status(serial_text):
+    """The OCSP-like answer for /api/status: good, revoked, expired or unknown."""
+    serial_hex = normalize_serial(serial_text)
+    row = find_certificate(serial_hex) if serial_hex else None
+    if row is None:
+        return {"serial": serial_text, "status": "unknown"}
+    status = certificate_status(row)
+    return {"serial": serial_hex, "status": "good" if status == "valid" else status,
+            "revocation_time": row["revoked_at"], "revocation_reason": row["revocation_reason"],
+            "not_after": row["not_after"], "subject_cn": row["subject_cn"]}
+
+
+def revoke_certificate(serial_hex, reason, actor):
+    """Mark a certificate revoked and publish a new CRL. Returns the new CRL."""
+    if reason not in REVOCATION_REASONS:
+        raise RevocationError(f"choose a reason: {', '.join(REVOCATION_REASONS)}")
+    row = find_certificate(serial_hex)
+    if row is None:
+        raise RevocationError(f"no certificate with serial {serial_hex}")
+    if row["status"] == "revoked":
+        raise RevocationError(f"certificate {serial_hex} is already revoked")
+
+    get_issuing_ca()        # unlock the CA key FIRST: if that fails, nothing has been changed yet
+    db = get_db()
+    db.execute("UPDATE certificates SET status = 'revoked', revoked_at = ?, revocation_reason = ? WHERE id = ?",
+               (iso(now_utc()), reason, row["id"]))
+    db.commit()
+    log_event(actor, "CERT_REVOKED", serial_hex, reason)
+    return publish_crl(actor)
+
+
+def publish_crl(actor="system"):
+    """Build, sign and save a fresh CRL that lists every revoked certificate. Returns it.
+
+    Each CRL gets the next CRL number (kept in crl_number.txt) and is valid for CRL_VALID_DAYS.
+    It is saved twice: crl.pem (text) and crl.der (binary, the usual format on the web).
+    """
+    ca = get_issuing_ca()
+    crl_dir = Path(current_app.config["CRL_DIR"])
+    crl_dir.mkdir(parents=True, exist_ok=True)
+    number_file = crl_dir / "crl_number.txt"
+    number = int(number_file.read_text()) + 1 if number_file.exists() else 1
+
+    now = now_utc()
+    builder = (
+        x509.CertificateRevocationListBuilder()
+        .issuer_name(ca.cert.subject)
+        .last_update(now)
+        .next_update(now + timedelta(days=CRL_VALID_DAYS))
+        .add_extension(x509.CRLNumber(number), critical=False)
+        .add_extension(authority_key_identifier(ca.cert), critical=False)
+    )
+    revoked = get_db().execute("SELECT serial_hex, revoked_at, revocation_reason FROM certificates"
+                               " WHERE status = 'revoked' ORDER BY id").fetchall()
+    for row in revoked:
+        builder = builder.add_revoked_certificate(
+            x509.RevokedCertificateBuilder()
+            .serial_number(int(row["serial_hex"], 16))
+            .revocation_date(parse_iso(row["revoked_at"]))
+            .add_extension(x509.CRLReason(REVOCATION_REASONS[row["revocation_reason"]]), critical=False)
+            .build())
+    crl = builder.sign(ca.key, hashes.SHA256())
+
+    (crl_dir / "crl.pem").write_bytes(crl.public_bytes(serialization.Encoding.PEM))
+    (crl_dir / "crl.der").write_bytes(crl.public_bytes(serialization.Encoding.DER))
+    number_file.write_text(str(number))
+    log_event(actor, "CRL_PUBLISHED", f"CRL #{number}",
+              f"{len(revoked)} revoked certificate(s); next update {iso(now + timedelta(days=CRL_VALID_DAYS))}")
+    return crl
+
+
+def current_crl():
+    """The published CRL. A new one is made if there is none yet, or the old one is past its nextUpdate."""
+    path = Path(current_app.config["CRL_DIR"]) / "crl.pem"
+    if path.exists():
+        crl = x509.load_pem_x509_crl(path.read_bytes())
+        if crl.next_update_utc > now_utc():
+            return crl
+    return publish_crl("system")
+
+
+# --------------------------------------------------------------------------------------
+# OCSP responder (stretch goal): the online, per-certificate version of the CRL
+# --------------------------------------------------------------------------------------
+
+def build_ocsp_response(request_der):
+    """Answer a DER-encoded OCSP request with a response signed by the Issuing CA."""
+    try:
+        req = ocsp.load_der_ocsp_request(request_der)
+    except ValueError:
+        return ocsp.OCSPResponseBuilder.build_unsuccessful(ocsp.OCSPResponseStatus.MALFORMED_REQUEST)
+
+    ca = get_issuing_ca()
+    now = now_utc()
+
+    # Is the question about OUR CA? The request names the issuer by a hash of its name and key.
+    name_hash = hashes.Hash(req.hash_algorithm)
+    name_hash.update(ca.cert.subject.public_bytes())
+    ca_key = ca.cert.public_key()
+    key_bits = (ca_key.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.PKCS1)
+                if isinstance(ca_key, rsa.RSAPublicKey)
+                else ca_key.public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint))
+    key_hash = hashes.Hash(req.hash_algorithm)
+    key_hash.update(key_bits)
+    ours = req.issuer_name_hash == name_hash.finalize() and req.issuer_key_hash == key_hash.finalize()
+
+    row = find_certificate(f"{req.serial_number:032x}") if ours else None
+    revocation_time = revocation_reason = None
+    if row is None:
+        cert_status = ocsp.OCSPCertStatus.UNKNOWN
+    elif row["status"] == "revoked":
+        cert_status = ocsp.OCSPCertStatus.REVOKED
+        revocation_time = parse_iso(row["revoked_at"])
+        revocation_reason = REVOCATION_REASONS[row["revocation_reason"]]
+    else:
+        cert_status = ocsp.OCSPCertStatus.GOOD
+
+    builder = (
+        ocsp.OCSPResponseBuilder()
+        .add_response_by_hash(
+            issuer_name_hash=req.issuer_name_hash, issuer_key_hash=req.issuer_key_hash,
+            serial_number=req.serial_number, algorithm=req.hash_algorithm, cert_status=cert_status,
+            this_update=now, next_update=now + timedelta(days=1),
+            revocation_time=revocation_time, revocation_reason=revocation_reason)
+        .responder_id(ocsp.OCSPResponderEncoding.HASH, ca.cert)
+    )
+    for extension in req.extensions:                 # echo the nonce: proves the answer is fresh
+        if isinstance(extension.value, x509.OCSPNonce):
+            builder = builder.add_extension(extension.value, critical=False)
+    return builder.sign(ca.key, hashes.SHA256())
+
+
+# --------------------------------------------------------------------------------------
+# Showing a certificate to people
+# --------------------------------------------------------------------------------------
+
+KEY_USAGE_NAMES = {"digital_signature": "Digital Signature", "content_commitment": "Non Repudiation",
+                   "key_encipherment": "Key Encipherment", "data_encipherment": "Data Encipherment",
+                   "key_agreement": "Key Agreement", "key_cert_sign": "Certificate Sign", "crl_sign": "CRL Sign"}
+EKU_NAMES = {ExtendedKeyUsageOID.CLIENT_AUTH: "TLS client authentication (clientAuth)",
+             ExtendedKeyUsageOID.SERVER_AUTH: "TLS server authentication (serverAuth)",
+             ExtendedKeyUsageOID.EMAIL_PROTECTION: "E-mail protection (emailProtection)",
+             ExtendedKeyUsageOID.CODE_SIGNING: "Code signing (codeSigning)"}
+
+
+def describe_certificate(cert):
+    """The fields of a certificate as readable text, for the detail page."""
+    def ext(cls):
+        try:
+            return cert.extensions.get_extension_for_class(cls)
+        except x509.ExtensionNotFound:
+            return None
+
+    basic, usage, eku, san, crl_points = (ext(x509.BasicConstraints), ext(x509.KeyUsage),
+                                          ext(x509.ExtendedKeyUsage), ext(x509.SubjectAlternativeName),
+                                          ext(x509.CRLDistributionPoints))
+    alt_names = []
+    if san:
+        alt_names = ([f"email: {v}" for v in san.value.get_values_for_type(x509.RFC822Name)]
+                     + [f"DNS: {v}" for v in san.value.get_values_for_type(x509.DNSName)])
+    return {
+        "Subject": subject_text(cert.subject),
+        "Issuer": subject_text(cert.issuer),
+        "Serial number": f"{cert.serial_number:032x}",
+        "Valid from": iso(cert.not_valid_before_utc),
+        "Valid until": iso(cert.not_valid_after_utc),
+        "Public key": key_label(cert.public_key()),
+        "Signature": f"{cert.signature_hash_algorithm.name.upper()} with the Issuing CA's key",
+        "Basic constraints": (f"CA:{'TRUE' if basic.value.ca else 'FALSE'}"
+                              + (" (critical)" if basic.critical else "")) if basic else "-",
+        "Key usage": ", ".join(name for bit, name in KEY_USAGE_NAMES.items() if getattr(usage.value, bit))
+                     + (" (critical)" if usage.critical else "") if usage else "-",
+        "Extended key usage": ", ".join(EKU_NAMES.get(oid, oid.dotted_string) for oid in eku.value) if eku else "-",
+        "Subject alternative names": ", ".join(alt_names) or "-",
+        "CRL distribution point": ", ".join(uri.value for point in crl_points.value for uri in point.full_name)
+                                  if crl_points else "-",
+        "SHA-256 fingerprint": cert.fingerprint(hashes.SHA256()).hex(":").upper(),
+    }

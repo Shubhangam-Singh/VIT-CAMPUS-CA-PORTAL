@@ -2,6 +2,7 @@
 
     python -m app.cli issue --template student_auth --name "Asha Rao" --email asha@vit.ac.in \\
                             --regno 21BCE0001 --csr asha.csr
+    python -m app.cli revoke --serial 7a4da5ea... --reason keyCompromise
 
 Set the ISSUING_CA_PASS environment variable first: it unlocks the Issuing CA key.
 By default the CA is the ca/ folder and the database is instance/campus_ca.db; --ca-dir and
@@ -11,8 +12,12 @@ import argparse
 import sys
 from pathlib import Path
 
+from cryptography import x509
+from flask import current_app
+
 from . import create_app
-from .ca_core import Identity, IssuanceError, issue_certificate, load_csr, subject_text
+from .ca_core import (REVOCATION_REASONS, Identity, IssuanceError, RevocationError, issue_certificate, load_csr,
+                      normalize_serial, revoke_certificate, subject_text)
 from .config import ca_folders
 from .db import init_db
 from .templates_def import TEMPLATES
@@ -36,6 +41,10 @@ def parse_args(argv):
     issue.add_argument("--csr", required=True, type=Path, help="certificate request file (PEM or DER)")
     issue.add_argument("--dns", action="append", default=[], metavar="HOST",
                        help="DNS name for a server_tls certificate (repeat it for several names)")
+
+    revoke = commands.add_parser("revoke", parents=[common], help="revoke a certificate and publish a new CRL")
+    revoke.add_argument("--serial", required=True, help="certificate serial number (hex)")
+    revoke.add_argument("--reason", required=True, choices=sorted(REVOCATION_REASONS))
     return parser.parse_args(argv)
 
 
@@ -57,6 +66,18 @@ def run_issue(args):
     print(f"  file      {result.pem_path}")
 
 
+def run_revoke(args):
+    serial_hex = normalize_serial(args.serial)
+    if serial_hex is None:
+        raise RevocationError(f"{args.serial!r} is not a serial number")
+    crl = revoke_certificate(serial_hex, args.reason, actor="cli")
+    number = crl.extensions.get_extension_for_class(x509.CRLNumber).value.crl_number
+    print(f"Certificate {serial_hex} revoked ({args.reason})")
+    print(f"  CRL #{number} published: {len(list(crl))} revoked certificate(s), "
+          f"next update {crl.next_update_utc:%Y-%m-%d %H:%M} UTC")
+    print(f"  file      {Path(current_app.config['CRL_DIR']) / 'crl.pem'}")
+
+
 def main(argv=None):
     args = parse_args(argv)
 
@@ -70,8 +91,8 @@ def main(argv=None):
     try:
         with app.app_context():       # the CA code reads its settings and the database from the Flask app
             init_db()
-            run_issue(args)
-    except IssuanceError as err:
+            {"issue": run_issue, "revoke": run_revoke}[args.command](args)
+    except (IssuanceError, RevocationError) as err:
         print(f"ERROR: {err}", file=sys.stderr)
         return 1
     return 0
